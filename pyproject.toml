@@ -1,0 +1,9 @@
+[project]
+name = "ueba-detector"
+version = "0.1.0"
+description = "Host UEBA anomaly detector"
+requires-python = ">=3.10"
+dependencies = ["psutil>=5.9"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

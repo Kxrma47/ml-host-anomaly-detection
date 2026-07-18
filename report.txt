@@ -1,0 +1,510 @@
+Русская версия
+
+Отчет по программному макету UEBA
+
+Цель работы
+
+Нужно было сделать макет, который собирает данные о работе компьютера,
+строит профиль нормального поведения и затем ищет отклонения при помощи ML.
+В этом решении анализируется локальная активность хоста: нагрузка, процессы,
+сетевые соединения и дисковые операции.
+
+Макет написан на Python. Он не требует внешней базы данных и запускается
+локально на рабочей станции. Основной сценарий такой:
+
+1. собрать нормальное поведение компьютера за 24 часа;
+2. перевести сырые события в числовые признаки;
+3. обучить автоэнкодер на нормальных данных;
+4. сохранить модель и порог аномальности;
+5. запустить постоянный мониторинг по сохраненной модели;
+6. записывать найденные аномалии в отчет.
+
+Какие данные используются
+
+В качестве источника данных взяты агрегированные показатели работы ПК:
+
+CPU usage;
+memory usage;
+swap usage;
+load average;
+количество процессов;
+количество пользовательских процессов;
+количество потоков;
+скорость сетевого приема и передачи;
+число TCP-соединений по состояниям ESTABLISHED, LISTEN, SYN_SENT, CLOSE_WAIT;
+количество различных удаленных портов;
+скорость чтения и записи на диск.
+
+Такие признаки подходят для макета UEBA, потому что они меняются при типичных
+локальных и сетевых аномалиях: резком запуске процессов, сетевом сканировании,
+подозрительном обмене с удаленными хостами, массовом чтении файлов или
+необычной нагрузке на систему.
+
+Структура проекта
+
+ueba_detector/collector.py       сбор телеметрии
+ueba_detector/features.py        подготовка числовых признаков и нормализация
+ueba_detector/autoencoder.py     автоэнкодер, обучение и расчет порога
+ueba_detector/reporting.py       JSONL-отчеты и объяснения аномалий
+ueba_detector/cli.py             команды collect, train, monitor, score, demo
+tests/                           unit-тесты
+examples/demo_run/               демонстрационный прогон с аномалиями
+data/baseline_24h_tcp.jsonl      реальная обучающая выборка за 24 часа
+models/ueba_model.json           обученная модель
+reports/live_monitor_summary.txt краткий результат живого мониторинга
+reports/demo_anomalies_summary.txt краткое описание demo-аномалий
+reports/demo_anomalies.jsonl     примеры отчетов по найденным аномалиям
+run_24h_collection.sh            запуск сбора на Linux/macOS
+run_24h_collection.bat           запуск сбора на Windows
+
+Установка
+
+Linux/macOS:
+
+cd Task
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+
+Windows PowerShell:
+
+cd Task
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+
+Сбор обучающей выборки
+
+Для выполнения требования по 24-часовому сбору используется команда:
+
+./run_24h_collection.sh
+
+На Windows:
+
+run_24h_collection.bat
+
+Результат записывается в файл:
+
+data/baseline_24h_tcp.jsonl
+
+Файл имеет формат JSONL: одна строка соответствует одному замеру состояния
+компьютера.
+
+Обучение
+
+После сбора данных модель обучается командой:
+
+python3 -m ueba_detector train --input data/baseline_24h_tcp.jsonl --model models/ueba_model.json
+
+В models/ueba_model.json сохраняются:
+
+список признаков;
+средние значения и стандартные отклонения для нормализации;
+веса и bias-значения автоэнкодера;
+порог аномальности;
+ошибки восстановления на обучающей выборке.
+
+Модель можно использовать повторно без переобучения.
+
+Непрерывный анализ
+
+Для запуска мониторинга:
+
+python3 -m ueba_detector monitor --model models/ueba_model.json --report reports/live_anomalies.jsonl --interval 10
+
+Команда загружает сохраненную модель, раз в 10 секунд собирает новый замер
+и считает ошибку восстановления. Если ошибка выше порога, событие записывается
+в отчет.
+
+Формат отчета
+
+Аномалии сохраняются в JSONL. Для каждого события указываются:
+
+время обнаружения;
+имя хоста;
+категория;
+важность;
+ошибка восстановления;
+порог;
+отношение ошибки к порогу;
+основные признаки, которые сильнее всего повлияли на решение;
+текстовое объяснение.
+
+Используются следующие категории:
+
+network_anomaly
+Нетипичная сетевая активность: много соединений, необычные порты,
+резкий рост входящего или исходящего трафика.
+
+process_activity_anomaly
+Нетипичное число процессов или потоков.
+
+storage_activity_anomaly
+Необычно активное чтение или запись на диск.
+
+resource_usage_anomaly
+Нетипичная нагрузка на CPU, память, swap или load average.
+
+Реальный 24-часовой сбор
+
+Обучающая выборка была собрана непрерывным запуском run_24h_collection.sh.
+
+Файл: data/baseline_24h_tcp.jsonl
+Количество строк: 1439
+Первая запись: 2026-07-17T22:10:11.142363Z
+Последняя запись: 2026-07-18T22:10:36.973200Z
+Длительность: 24.007 часа
+Максимальный разрыв между соседними записями: 60.336 секунды
+Разрывов больше 90 секунд: 0
+
+Последние строки обучающей выборки содержали реальные значения по процессам
+и TCP-соединениям, например:
+
+process_count: 496
+user_process_count: 310
+thread_count: 1815
+tcp_established: 28
+tcp_listen: 9
+unique_remote_ports: 3
+
+Результат обучения на 24-часовой выборке
+
+Команда:
+
+python3 -m ueba_detector train --input data/baseline_24h_tcp.jsonl --model models/ueba_model.json
+
+Вывод:
+
+trained on 1439 samples
+model saved to models/ueba_model.json
+anomaly threshold: 3.176267
+
+Проверка живого мониторинга
+
+После обучения был запущен monitor с сохраненной моделью. За 2 минуты было
+получено 13 проверок текущего состояния компьютера. Все проверки прошли как
+нормальные, отношение ошибки к порогу находилось примерно от 0.02 до 0.09.
+
+Это ожидаемый результат: модель обучалась на нормальном поведении этого же
+хоста, поэтому обычное состояние компьютера не должно сразу считаться атакой.
+
+Демонстрация обнаружения аномалий
+
+Для проверки реакции на явные отклонения в проекте есть demo-сценарий:
+
+python3 -m ueba_detector demo --output-dir examples/demo_run
+
+В нем создается синтетическая выборка с нормальными событиями и добавленными
+аномалиями трех типов:
+
+network_scan;
+bulk_file_access;
+suspicious_process_burst.
+
+Результат demo:
+
+train samples: 360
+test samples: 120
+injected anomalies: 26
+detected injected anomalies: 26
+normal samples: 94
+normal false positives: 3
+false negatives: 0
+recall: 1.0
+
+Найденные события:
+
+network_scan: 10
+bulk_file_access: 8
+suspicious_process_burst: 8
+normal false positives: 3
+
+Unit-тесты
+
+Был запущен набор тестов:
+
+python3 -m unittest discover -s tests
+
+Результат:
+
+Ran 8 tests
+OK
+
+Соответствие пунктам задания
+
+1. Сбор данных реализован. Команда collect пишет обучающую выборку в JSONL.
+2. Оцифровка и нормализация реализованы. События переводятся в числовой вектор,
+   затем применяется z-score нормализация.
+3. Нейросеть обучается на собранной выборке. Используется автоэнкодер с одним
+   скрытым слоем. Порог выбирается по ошибке восстановления на нормальных данных.
+4. Непрерывный анализ реализован командой monitor. Она загружает модель с диска
+   и анализирует новые события.
+5. Отчеты формируются в JSONL. Для аномалий сохраняются категория, важность,
+   признаки и объяснение с точки зрения информационной безопасности.
+6. Сохраненная модель приложена в models/ueba_model.json и может быть
+   использована при следующем запуске без повторного обучения.
+
+Итог
+
+Макет выполняет все основные этапы UEBA из задания: сбор данных, нормализацию,
+обучение нейросети, выбор порога, мониторинг и формирование отчетов. Реальный
+сбор обучающей выборки длился больше 24 часов без больших разрывов. Модель
+обучена на этой выборке, сохранена на диск и проверена в режиме мониторинга.
+
+
+English version
+
+Report on the UEBA prototype
+
+Project goal
+
+The task was to build a prototype that collects host activity data, builds a
+normal behavior profile, and then detects deviations with machine learning.
+This implementation analyzes local host activity: resource usage, processes,
+network connections, and disk operations.
+
+The prototype is written in Python. It runs locally on a workstation and does
+not require an external database. The workflow is:
+
+1. collect normal computer behavior for 24 hours;
+2. convert raw events into numeric features;
+3. train an autoencoder on normal data;
+4. save the trained model and anomaly threshold;
+5. start continuous monitoring with the saved model;
+6. write detected anomalies to a report.
+
+Collected data
+
+The data source is a set of aggregated host metrics:
+
+CPU usage;
+memory usage;
+swap usage;
+load average;
+process count;
+user process count;
+thread count;
+network receive and transmit rates;
+TCP connection counters for ESTABLISHED, LISTEN, SYN_SENT, CLOSE_WAIT;
+number of unique remote ports;
+disk read and write rates.
+
+These features are suitable for a UEBA prototype because they change during
+common local and network anomalies: sudden process bursts, network scanning,
+unusual communication with remote hosts, mass file reads, or abnormal resource
+usage.
+
+Project structure
+
+ueba_detector/collector.py       telemetry collection
+ueba_detector/features.py        numeric feature preparation and normalization
+ueba_detector/autoencoder.py     autoencoder, training, and threshold selection
+ueba_detector/reporting.py       JSONL reports and anomaly explanations
+ueba_detector/cli.py             collect, train, monitor, score, demo commands
+tests/                           unit tests
+examples/demo_run/               demo run with injected anomalies
+data/baseline_24h_tcp.jsonl      real 24-hour training dataset
+models/ueba_model.json           trained model
+reports/live_monitor_summary.txt short live monitoring result
+reports/demo_anomalies_summary.txt short demo anomaly summary
+reports/demo_anomalies.jsonl     example anomaly report records
+run_24h_collection.sh            24-hour collection script for Linux/macOS
+run_24h_collection.bat           24-hour collection script for Windows
+
+Installation
+
+Linux/macOS:
+
+cd Task
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+
+Windows PowerShell:
+
+cd Task
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+
+Training data collection
+
+The 24-hour collection requirement is handled by this command:
+
+./run_24h_collection.sh
+
+On Windows:
+
+run_24h_collection.bat
+
+The output is written to:
+
+data/baseline_24h_tcp.jsonl
+
+The file uses the JSONL format: one line is one telemetry sample.
+
+Training
+
+After data collection, the model is trained with:
+
+python3 -m ueba_detector train --input data/baseline_24h_tcp.jsonl --model models/ueba_model.json
+
+The file models/ueba_model.json stores:
+
+feature names;
+means and standard deviations for normalization;
+autoencoder weights and bias values;
+anomaly threshold;
+training reconstruction errors.
+
+The saved model can be reused later without retraining.
+
+Continuous monitoring
+
+Monitoring is started with:
+
+python3 -m ueba_detector monitor --model models/ueba_model.json --report reports/live_anomalies.jsonl --interval 10
+
+The command loads the saved model, collects a new telemetry sample every
+10 seconds, and computes the reconstruction error. If the error is above the
+threshold, the event is written to the report.
+
+Report format
+
+Anomalies are saved in JSONL format. Each event contains:
+
+detection time;
+host name;
+category;
+severity;
+reconstruction error;
+threshold;
+error-to-threshold ratio;
+top contributing features;
+text explanation.
+
+The following categories are used:
+
+network_anomaly
+Unusual network activity: many connections, unusual ports, or a sudden increase
+in incoming or outgoing traffic.
+
+process_activity_anomaly
+Unusual number of processes or threads.
+
+storage_activity_anomaly
+Unusually active disk reads or writes.
+
+resource_usage_anomaly
+Unusual CPU, memory, swap, or load average behavior.
+
+Real 24-hour collection
+
+The training dataset was collected by a continuous run of run_24h_collection.sh.
+
+File: data/baseline_24h_tcp.jsonl
+Rows: 1439
+First record: 2026-07-17T22:10:11.142363Z
+Last record: 2026-07-18T22:10:36.973200Z
+Duration: 24.007 hours
+Maximum gap between neighboring records: 60.336 seconds
+Gaps greater than 90 seconds: 0
+
+The last rows of the training dataset contained real process and TCP values,
+for example:
+
+process_count: 496
+user_process_count: 310
+thread_count: 1815
+tcp_established: 28
+tcp_listen: 9
+unique_remote_ports: 3
+
+Training result on the 24-hour dataset
+
+Command:
+
+python3 -m ueba_detector train --input data/baseline_24h_tcp.jsonl --model models/ueba_model.json
+
+Output:
+
+trained on 1439 samples
+model saved to models/ueba_model.json
+anomaly threshold: 3.176267
+
+Live monitoring check
+
+After training, monitor was started with the saved model. During a 2-minute
+run, 13 checks of the current computer state were collected. All checks were
+classified as normal. The error-to-threshold ratio was approximately between
+0.02 and 0.09.
+
+This is the expected result: the model was trained on normal behavior from the
+same host, so normal current activity should not immediately be classified as
+an attack.
+
+Anomaly detection demo
+
+The project includes a demo scenario for checking the reaction to clear
+deviations:
+
+python3 -m ueba_detector demo --output-dir examples/demo_run
+
+The demo generates normal samples and injected anomalies of three types:
+
+network_scan;
+bulk_file_access;
+suspicious_process_burst.
+
+Demo result:
+
+train samples: 360
+test samples: 120
+injected anomalies: 26
+detected injected anomalies: 26
+normal samples: 94
+normal false positives: 3
+false negatives: 0
+recall: 1.0
+
+Detected events:
+
+network_scan: 10
+bulk_file_access: 8
+suspicious_process_burst: 8
+normal false positives: 3
+
+Unit tests
+
+The test suite was run with:
+
+python3 -m unittest discover -s tests
+
+Result:
+
+Ran 8 tests
+OK
+
+Requirement coverage
+
+1. Data collection is implemented. The collect command writes the training
+   dataset to JSONL.
+2. Numeric conversion and normalization are implemented. Events are converted
+   to a numeric vector and normalized with z-score normalization.
+3. The neural network is trained on the collected dataset. The model is a
+   single-hidden-layer autoencoder. The threshold is selected from reconstruction
+   errors on normal data.
+4. Continuous analysis is implemented through the monitor command. It loads the
+   model from disk and analyzes new events.
+5. Reports are written in JSONL. For each anomaly, the report stores category,
+   severity, contributing features, and a security-oriented explanation.
+6. The saved model is included as models/ueba_model.json and can be used in a
+   later run without retraining.
+
+Conclusion
+
+The prototype implements the main UEBA stages required by the task: data
+collection, normalization, neural network training, threshold selection,
+monitoring, and report generation. The real training data collection lasted
+more than 24 hours and had no large gaps. The model was trained on this dataset,
+saved to disk, and checked in monitoring mode.

@@ -1,0 +1,16 @@
+{
+  "detected_by_scenario": {
+    "bulk_file_access": 8,
+    "network_scan": 10,
+    "normal": 3,
+    "suspicious_process_burst": 8
+  },
+  "false_negatives": 0,
+  "false_positive_rate": 0.031914893617021274,
+  "false_positives": 3,
+  "injected_anomalies": 26,
+  "normal_samples": 94,
+  "recall": 1.0,
+  "samples": 120,
+  "true_positives": 26
+}

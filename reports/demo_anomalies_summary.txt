@@ -1,0 +1,81 @@
+Русская версия
+
+Краткий отчет по demo-аномалиям
+
+Demo-сценарий нужен для проверки, что модель реагирует на явные отклонения.
+В нем создается синтетическая тестовая выборка с нормальными событиями и
+добавленными аномалиями.
+
+Типы добавленных аномалий:
+
+network_scan
+Имитация сетевого сканирования: много соединений, необычные порты и рост
+сетевой активности.
+
+bulk_file_access
+Имитация массового чтения или записи файлов.
+
+suspicious_process_burst
+Имитация резкого роста числа процессов или потоков.
+
+Результат demo:
+
+train samples: 360
+test samples: 120
+injected anomalies: 26
+detected injected anomalies: 26
+normal samples: 94
+normal false positives: 3
+false negatives: 0
+recall: 1.0
+
+Разбивка найденных событий:
+
+network_scan: 10
+bulk_file_access: 8
+suspicious_process_burst: 8
+normal false positives: 3
+
+Подробные JSONL-записи находятся в файле:
+reports/demo_anomalies.jsonl
+
+
+English version
+
+Demo anomaly summary
+
+The demo scenario checks whether the model reacts to clear deviations. It
+creates a synthetic test dataset with normal events and injected anomalies.
+
+Injected anomaly types:
+
+network_scan
+Simulated network scanning: many connections, unusual ports, and increased
+network activity.
+
+bulk_file_access
+Simulated mass file reads or writes.
+
+suspicious_process_burst
+Simulated sudden growth in process or thread count.
+
+Demo result:
+
+train samples: 360
+test samples: 120
+injected anomalies: 26
+detected injected anomalies: 26
+normal samples: 94
+normal false positives: 3
+false negatives: 0
+recall: 1.0
+
+Detected events:
+
+network_scan: 10
+bulk_file_access: 8
+suspicious_process_burst: 8
+normal false positives: 3
+
+Detailed JSONL records are stored in:
+reports/demo_anomalies.jsonl

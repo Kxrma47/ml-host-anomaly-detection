@@ -1,0 +1,303 @@
+UEBA anomaly report
+
+Total anomalies: 29
+
+Categories
+
+- network_anomaly: 11
+- storage_activity_anomaly: 8
+- process_activity_anomaly: 8
+- resource_usage_anomaly: 2
+
+Events
+
+Event 1
+
+- Timestamp: 2026-01-02T00:12:00Z
+- Host: demo-host
+- Severity: medium
+- Category: resource_usage_anomaly
+- Error ratio: 1.20
+- Explanation: Host resource usage differs from normal behavior; possible crypto-mining, compression, or abnormal application activity.
+- Top features: cpu_percent, disk_write_bytes_per_sec, process_count, loadavg_1m, unique_remote_ports
+
+Event 2
+
+- Timestamp: 2026-01-02T00:22:00Z
+- Host: demo-host
+- Severity: medium
+- Category: resource_usage_anomaly
+- Error ratio: 1.12
+- Explanation: Host resource usage differs from normal behavior; possible crypto-mining, compression, or abnormal application activity.
+- Top features: disk_write_bytes_per_sec, memory_percent, cpu_percent, swap_percent, thread_count
+
+Event 3
+
+- Timestamp: 2026-01-02T00:23:00Z
+- Host: demo-host
+- Severity: medium
+- Category: network_anomaly
+- Error ratio: 1.01
+- Explanation: Network connection profile differs from the learned baseline; possible scan, C2 beaconing, or unusual data transfer.
+- Top features: tcp_established, net_bytes_sent_per_sec, memory_percent, net_packets_sent_per_sec, tcp_close_wait
+
+Event 4
+
+- Timestamp: 2026-01-02T00:30:00Z
+- Host: demo-host
+- Severity: critical
+- Category: network_anomaly
+- Error ratio: 813.82
+- Explanation: Network connection profile differs from the learned baseline; possible scan, C2 beaconing, or unusual data transfer.
+- Top features: tcp_syn_sent, unique_remote_ports, net_packets_sent_per_sec, memory_percent, net_packets_recv_per_sec
+
+Event 5
+
+- Timestamp: 2026-01-02T00:31:00Z
+- Host: demo-host
+- Severity: critical
+- Category: network_anomaly
+- Error ratio: 829.05
+- Explanation: Network connection profile differs from the learned baseline; possible scan, C2 beaconing, or unusual data transfer.
+- Top features: tcp_syn_sent, unique_remote_ports, net_packets_sent_per_sec, memory_percent, swap_percent
+
+Event 6
+
+- Timestamp: 2026-01-02T00:32:00Z
+- Host: demo-host
+- Severity: critical
+- Category: network_anomaly
+- Error ratio: 846.79
+- Explanation: Network connection profile differs from the learned baseline; possible scan, C2 beaconing, or unusual data transfer.
+- Top features: tcp_syn_sent, unique_remote_ports, net_packets_sent_per_sec, net_packets_recv_per_sec, memory_percent
+
+Event 7
+
+- Timestamp: 2026-01-02T00:33:00Z
+- Host: demo-host
+- Severity: critical
+- Category: network_anomaly
+- Error ratio: 862.78
+- Explanation: Network connection profile differs from the learned baseline; possible scan, C2 beaconing, or unusual data transfer.
+- Top features: tcp_syn_sent, unique_remote_ports, net_packets_sent_per_sec, tcp_close_wait, memory_percent
+
+Event 8
+
+- Timestamp: 2026-01-02T00:34:00Z
+- Host: demo-host
+- Severity: critical
+- Category: network_anomaly
+- Error ratio: 879.39
+- Explanation: Network connection profile differs from the learned baseline; possible scan, C2 beaconing, or unusual data transfer.
+- Top features: tcp_syn_sent, unique_remote_ports, net_packets_sent_per_sec, memory_percent, net_packets_recv_per_sec
+
+Event 9
+
+- Timestamp: 2026-01-02T00:35:00Z
+- Host: demo-host
+- Severity: critical
+- Category: network_anomaly
+- Error ratio: 816.63
+- Explanation: Network connection profile differs from the learned baseline; possible scan, C2 beaconing, or unusual data transfer.
+- Top features: tcp_syn_sent, unique_remote_ports, net_packets_sent_per_sec, memory_percent, net_packets_recv_per_sec
+
+Event 10
+
+- Timestamp: 2026-01-02T00:36:00Z
+- Host: demo-host
+- Severity: critical
+- Category: network_anomaly
+- Error ratio: 833.96
+- Explanation: Network connection profile differs from the learned baseline; possible scan, C2 beaconing, or unusual data transfer.
+- Top features: tcp_syn_sent, unique_remote_ports, net_packets_sent_per_sec, net_packets_recv_per_sec, memory_percent
+
+Event 11
+
+- Timestamp: 2026-01-02T00:37:00Z
+- Host: demo-host
+- Severity: critical
+- Category: network_anomaly
+- Error ratio: 849.93
+- Explanation: Network connection profile differs from the learned baseline; possible scan, C2 beaconing, or unusual data transfer.
+- Top features: tcp_syn_sent, unique_remote_ports, net_packets_sent_per_sec, memory_percent, net_packets_recv_per_sec
+
+Event 12
+
+- Timestamp: 2026-01-02T00:38:00Z
+- Host: demo-host
+- Severity: critical
+- Category: network_anomaly
+- Error ratio: 864.58
+- Explanation: Network connection profile differs from the learned baseline; possible scan, C2 beaconing, or unusual data transfer.
+- Top features: tcp_syn_sent, unique_remote_ports, net_packets_sent_per_sec, loadavg_1m, tcp_close_wait
+
+Event 13
+
+- Timestamp: 2026-01-02T00:39:00Z
+- Host: demo-host
+- Severity: critical
+- Category: network_anomaly
+- Error ratio: 880.54
+- Explanation: Network connection profile differs from the learned baseline; possible scan, C2 beaconing, or unusual data transfer.
+- Top features: tcp_syn_sent, unique_remote_ports, net_packets_sent_per_sec, net_packets_recv_per_sec, memory_percent
+
+Event 14
+
+- Timestamp: 2026-01-02T01:00:00Z
+- Host: demo-host
+- Severity: critical
+- Category: storage_activity_anomaly
+- Error ratio: 13836.55
+- Explanation: Disk I/O differs from normal behavior; possible bulk file access, staging, backup, or exfiltration preparation.
+- Top features: disk_read_bytes_per_sec, disk_write_bytes_per_sec, tcp_listen, memory_percent, thread_count
+
+Event 15
+
+- Timestamp: 2026-01-02T01:01:00Z
+- Host: demo-host
+- Severity: critical
+- Category: storage_activity_anomaly
+- Error ratio: 13838.74
+- Explanation: Disk I/O differs from normal behavior; possible bulk file access, staging, backup, or exfiltration preparation.
+- Top features: disk_read_bytes_per_sec, disk_write_bytes_per_sec, thread_count, tcp_listen, net_bytes_recv_per_sec
+
+Event 16
+
+- Timestamp: 2026-01-02T01:02:00Z
+- Host: demo-host
+- Severity: critical
+- Category: storage_activity_anomaly
+- Error ratio: 13840.74
+- Explanation: Disk I/O differs from normal behavior; possible bulk file access, staging, backup, or exfiltration preparation.
+- Top features: disk_read_bytes_per_sec, disk_write_bytes_per_sec, loadavg_1m, memory_percent, user_process_count
+
+Event 17
+
+- Timestamp: 2026-01-02T01:03:00Z
+- Host: demo-host
+- Severity: critical
+- Category: storage_activity_anomaly
+- Error ratio: 13844.14
+- Explanation: Disk I/O differs from normal behavior; possible bulk file access, staging, backup, or exfiltration preparation.
+- Top features: disk_read_bytes_per_sec, disk_write_bytes_per_sec, tcp_listen, net_bytes_recv_per_sec, swap_percent
+
+Event 18
+
+- Timestamp: 2026-01-02T01:04:00Z
+- Host: demo-host
+- Severity: critical
+- Category: storage_activity_anomaly
+- Error ratio: 13845.19
+- Explanation: Disk I/O differs from normal behavior; possible bulk file access, staging, backup, or exfiltration preparation.
+- Top features: disk_read_bytes_per_sec, disk_write_bytes_per_sec, memory_percent, user_process_count, tcp_listen
+
+Event 19
+
+- Timestamp: 2026-01-02T01:05:00Z
+- Host: demo-host
+- Severity: critical
+- Category: storage_activity_anomaly
+- Error ratio: 13849.24
+- Explanation: Disk I/O differs from normal behavior; possible bulk file access, staging, backup, or exfiltration preparation.
+- Top features: disk_read_bytes_per_sec, disk_write_bytes_per_sec, memory_percent, loadavg_1m, user_process_count
+
+Event 20
+
+- Timestamp: 2026-01-02T01:06:00Z
+- Host: demo-host
+- Severity: critical
+- Category: storage_activity_anomaly
+- Error ratio: 13850.68
+- Explanation: Disk I/O differs from normal behavior; possible bulk file access, staging, backup, or exfiltration preparation.
+- Top features: disk_read_bytes_per_sec, disk_write_bytes_per_sec, thread_count, tcp_listen, memory_percent
+
+Event 21
+
+- Timestamp: 2026-01-02T01:07:00Z
+- Host: demo-host
+- Severity: critical
+- Category: storage_activity_anomaly
+- Error ratio: 13855.24
+- Explanation: Disk I/O differs from normal behavior; possible bulk file access, staging, backup, or exfiltration preparation.
+- Top features: disk_read_bytes_per_sec, disk_write_bytes_per_sec, net_bytes_recv_per_sec, tcp_listen, loadavg_1m
+
+Event 22
+
+- Timestamp: 2026-01-02T01:30:00Z
+- Host: demo-host
+- Severity: critical
+- Category: process_activity_anomaly
+- Error ratio: 51.97
+- Explanation: Process/thread profile differs from normal behavior; possible tool launch, automation, or suspicious workload.
+- Top features: thread_count, process_count, cpu_percent, net_bytes_sent_per_sec, disk_write_bytes_per_sec
+
+Event 23
+
+- Timestamp: 2026-01-02T01:31:00Z
+- Host: demo-host
+- Severity: critical
+- Category: process_activity_anomaly
+- Error ratio: 51.31
+- Explanation: Process/thread profile differs from normal behavior; possible tool launch, automation, or suspicious workload.
+- Top features: thread_count, process_count, cpu_percent, net_bytes_recv_per_sec, memory_percent
+
+Event 24
+
+- Timestamp: 2026-01-02T01:32:00Z
+- Host: demo-host
+- Severity: critical
+- Category: process_activity_anomaly
+- Error ratio: 52.21
+- Explanation: Process/thread profile differs from normal behavior; possible tool launch, automation, or suspicious workload.
+- Top features: thread_count, process_count, cpu_percent, net_bytes_recv_per_sec, disk_write_bytes_per_sec
+
+Event 25
+
+- Timestamp: 2026-01-02T01:33:00Z
+- Host: demo-host
+- Severity: critical
+- Category: process_activity_anomaly
+- Error ratio: 52.73
+- Explanation: Process/thread profile differs from normal behavior; possible tool launch, automation, or suspicious workload.
+- Top features: thread_count, process_count, cpu_percent, tcp_established, net_bytes_sent_per_sec
+
+Event 26
+
+- Timestamp: 2026-01-02T01:34:00Z
+- Host: demo-host
+- Severity: critical
+- Category: process_activity_anomaly
+- Error ratio: 52.14
+- Explanation: Process/thread profile differs from normal behavior; possible tool launch, automation, or suspicious workload.
+- Top features: thread_count, process_count, cpu_percent, net_bytes_sent_per_sec, tcp_established
+
+Event 27
+
+- Timestamp: 2026-01-02T01:35:00Z
+- Host: demo-host
+- Severity: critical
+- Category: process_activity_anomaly
+- Error ratio: 52.66
+- Explanation: Process/thread profile differs from normal behavior; possible tool launch, automation, or suspicious workload.
+- Top features: thread_count, process_count, cpu_percent, disk_write_bytes_per_sec, tcp_established
+
+Event 28
+
+- Timestamp: 2026-01-02T01:36:00Z
+- Host: demo-host
+- Severity: critical
+- Category: process_activity_anomaly
+- Error ratio: 52.84
+- Explanation: Process/thread profile differs from normal behavior; possible tool launch, automation, or suspicious workload.
+- Top features: thread_count, process_count, cpu_percent, net_bytes_recv_per_sec, disk_write_bytes_per_sec
+
+Event 29
+
+- Timestamp: 2026-01-02T01:37:00Z
+- Host: demo-host
+- Severity: critical
+- Category: process_activity_anomaly
+- Error ratio: 52.42
+- Explanation: Process/thread profile differs from normal behavior; possible tool launch, automation, or suspicious workload.
+- Top features: thread_count, process_count, cpu_percent, net_bytes_sent_per_sec, disk_write_bytes_per_sec
+
