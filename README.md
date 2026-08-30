@@ -2,6 +2,7 @@
 
 [![Tests](https://github.com/Kxrma47/ml-host-anomaly-detection/actions/workflows/tests.yml/badge.svg)](https://github.com/Kxrma47/ml-host-anomaly-detection/actions/workflows/tests.yml)
 ![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 ![Status](https://img.shields.io/badge/status-research%20prototype-7C3AED)
 [![GitHub stars](https://img.shields.io/github/stars/Kxrma47/ml-host-anomaly-detection?style=social)](https://github.com/Kxrma47/ml-host-anomaly-detection/stargazers)
 
@@ -155,3 +156,7 @@ OK
 - `reports/demo_anomalies.jsonl` contains example anomaly records.
 - The 24-hour dataset has the host name anonymized before publishing.
 - This is a prototype intended for a test assignment, not a production security system.
+
+## License
+
+Released under the [MIT License](LICENSE). Copyright (c) 2026 Mahidul Haque.
