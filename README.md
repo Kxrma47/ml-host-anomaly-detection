@@ -9,6 +9,10 @@
 **A reproducible UEBA-style pipeline for detecting anomalous workstation
 telemetry with a compact neural autoencoder.**
 
+<p align="center">
+  <img src="docs/assets/terminal-demo.gif" width="100%" alt="Terminal demo showing the reproducible anomaly-detection benchmark" />
+</p>
+
 It collects local host telemetry, trains an autoencoder on normal behavior, and then uses the saved model to monitor new samples. The goal is not to replace an EDR or SIEM product. The goal is to show the full pipeline: data collection, normalization, model training, threshold selection, monitoring, and anomaly reporting.
 
 ## Verified benchmark
@@ -56,7 +60,16 @@ examples/demo_run/             synthetic demo data and outputs
 report.txt                     full bilingual report
 ```
 
-## Install
+## Quick start
+
+Clone the repository, then run the complete setup, test, and deterministic demo
+with one command:
+
+```bash
+make quickstart
+```
+
+## Manual installation
 
 Linux/macOS:
 
