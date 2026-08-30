@@ -1,8 +1,34 @@
 # ML Host Anomaly Detection
 
-This project is a small UEBA-style prototype for detecting unusual activity on a workstation.
+[![Tests](https://github.com/Kxrma47/ml-host-anomaly-detection/actions/workflows/tests.yml/badge.svg)](https://github.com/Kxrma47/ml-host-anomaly-detection/actions/workflows/tests.yml)
+![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)
+![Status](https://img.shields.io/badge/status-research%20prototype-7C3AED)
+[![GitHub stars](https://img.shields.io/github/stars/Kxrma47/ml-host-anomaly-detection?style=social)](https://github.com/Kxrma47/ml-host-anomaly-detection/stargazers)
+
+**A reproducible UEBA-style pipeline for detecting anomalous workstation
+telemetry with a compact neural autoencoder.**
 
 It collects local host telemetry, trains an autoencoder on normal behavior, and then uses the saved model to monitor new samples. The goal is not to replace an EDR or SIEM product. The goal is to show the full pipeline: data collection, normalization, model training, threshold selection, monitoring, and anomaly reporting.
+
+## Verified benchmark
+
+| Signal | Result |
+| --- | ---: |
+| Real baseline telemetry | 1,439 samples / 24 hours |
+| Injected anomaly detection | 26 / 26 |
+| False negatives | 0 |
+| Normal false positives | 3 / 94 |
+| Recall | 1.0 |
+
+The benchmark is fully reproducible from deterministic synthetic data. See
+[Reproducing the demo](docs/reproducibility.md) for the clean-room workflow and
+machine-readable output checks.
+
+## Pipeline
+
+<p align="center">
+  <img src="docs/pipeline.svg" width="100%" alt="Telemetry collection, feature normalization, autoencoder training, threshold calibration, scoring, and anomaly reporting pipeline" />
+</p>
 
 ## What is collected
 
@@ -71,9 +97,6 @@ normal false positives: 3
 false negatives: 0
 recall: 1.0
 ```
-
-For a clean-room verification workflow, expected artifacts, and metric checks,
-see [Reproducing the demo](docs/reproducibility.md).
 
 ## Train on collected data
 

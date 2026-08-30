@@ -1,0 +1,24 @@
+<svg width="1000" height="176" viewBox="0 0 1000 176" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Host anomaly detection pipeline</title>
+  <desc id="desc">Six connected stages from host telemetry collection through anomaly reporting.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1000" y2="176" gradientUnits="userSpaceOnUse"><stop stop-color="#07111D"/><stop offset="1" stop-color="#0B1627"/></linearGradient>
+    <linearGradient id="signal" x1="42" y1="0" x2="958" y2="0" gradientUnits="userSpaceOnUse"><stop stop-color="#22D3EE"/><stop offset=".55" stop-color="#38BDF8"/><stop offset="1" stop-color="#A78BFA"/></linearGradient>
+    <pattern id="dots" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r=".7" fill="#67E8F9" fill-opacity=".06"/></pattern>
+  </defs>
+  <rect x="1" y="1" width="998" height="174" rx="15" fill="url(#bg)" stroke="#1E3A4A"/>
+  <rect x="1" y="1" width="998" height="174" rx="15" fill="url(#dots)"/>
+  <path d="M43 90H957" fill="none" stroke="#334155" stroke-width="2"/>
+  <path d="M43 90H957" fill="none" stroke="url(#signal)" stroke-width="2" stroke-dasharray="5 8"/>
+
+  <g font-family="ui-monospace,SFMono-Regular,Consolas,Liberation Mono,monospace" text-anchor="middle">
+    <g transform="translate(82 90)"><circle r="31" fill="#081B28" stroke="#22D3EE"/><path d="M-14 5L-7 -4L0 8L8 -12L15 3" fill="none" stroke="#67E8F9" stroke-width="2"/><text y="54" fill="#CBD5E1" font-size="11">COLLECT</text><text y="69" fill="#64748B" font-size="8">HOST METRICS</text></g>
+    <g transform="translate(250 90)"><circle r="31" fill="#081B28" stroke="#22D3EE"/><path d="M-15 -10H15M-11 0H11M-7 10H7" fill="none" stroke="#67E8F9" stroke-width="2"/><text y="54" fill="#CBD5E1" font-size="11">NORMALIZE</text><text y="69" fill="#64748B" font-size="8">FEATURE VECTOR</text></g>
+    <g transform="translate(418 90)"><circle r="31" fill="#0D172A" stroke="#38BDF8"/><circle r="7" fill="none" stroke="#7DD3FC"/><path d="M-20 -13L-7 -3M-20 13L-7 3M7 -3L20 -13M7 3L20 13" fill="none" stroke="#7DD3FC"/><text y="54" fill="#CBD5E1" font-size="11">TRAIN</text><text y="69" fill="#64748B" font-size="8">AUTOENCODER</text></g>
+    <g transform="translate(586 90)"><circle r="31" fill="#10152A" stroke="#818CF8"/><path d="M-17 10L-6 1L3 6L17 -13" fill="none" stroke="#A5B4FC" stroke-width="2"/><path d="M-17 15H17" fill="none" stroke="#475569"/><text y="54" fill="#CBD5E1" font-size="11">CALIBRATE</text><text y="69" fill="#64748B" font-size="8">THRESHOLD</text></g>
+    <g transform="translate(754 90)"><circle r="31" fill="#141329" stroke="#8B5CF6"/><path d="M-17 0H17M0 -17V17" fill="none" stroke="#C4B5FD"/><circle cx="9" cy="-8" r="5" fill="#A78BFA"/><text y="54" fill="#CBD5E1" font-size="11">SCORE</text><text y="69" fill="#64748B" font-size="8">LIVE SAMPLE</text></g>
+    <g transform="translate(922 90)"><circle r="31" fill="#171128" stroke="#A78BFA"/><path d="M-13 -15H8L16 -7V15H-13Z" fill="none" stroke="#DDD6FE"/><path d="M8 -15V-7H16M-6 -2H9M-6 6H5" fill="none" stroke="#DDD6FE"/><text y="54" fill="#CBD5E1" font-size="11">REPORT</text><text y="69" fill="#64748B" font-size="8">JSONL EVENT</text></g>
+  </g>
+
+  <g fill="#94A3B8"><path d="M130 86L138 90L130 94Z"/><path d="M298 86L306 90L298 94Z"/><path d="M466 86L474 90L466 94Z"/><path d="M634 86L642 90L634 94Z"/><path d="M802 86L810 90L802 94Z"/></g>
+</svg>
