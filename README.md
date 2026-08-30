@@ -72,6 +72,9 @@ false negatives: 0
 recall: 1.0
 ```
 
+For a clean-room verification workflow, expected artifacts, and metric checks,
+see [Reproducing the demo](docs/reproducibility.md).
+
 ## Train on collected data
 
 The repository includes an anonymized 24-hour baseline collected from a real workstation:
