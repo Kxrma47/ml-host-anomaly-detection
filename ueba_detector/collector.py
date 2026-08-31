@@ -7,7 +7,7 @@ import time
 from datetime import datetime, timezone
 from typing import Any
 
-from .storage import append_jsonl
+from .storage import RotatingJsonlWriter
 
 
 def parse_duration(value: str | None) -> float | None:
@@ -330,12 +330,26 @@ class TelemetryCollector:
         return sample
 
 
-def collect_to_file(output: str, *, interval: float, duration: float | None) -> None:
+def collect_to_file(
+    output: str,
+    *,
+    interval: float,
+    duration: float | None,
+    max_file_bytes: int = 0,
+    retention_days: float | None = None,
+    compress_rotated: bool = True,
+) -> None:
     collector = TelemetryCollector()
+    writer = RotatingJsonlWriter(
+        output,
+        max_bytes=max_file_bytes,
+        retention_days=retention_days,
+        compress=compress_rotated,
+    )
     started = time.time()
     while True:
         sample = collector.sample()
-        append_jsonl(output, sample)
+        writer.write(sample)
         print(f"{sample['timestamp']} collected host sample", flush=True)
         if duration is not None and time.time() - started >= duration:
             break

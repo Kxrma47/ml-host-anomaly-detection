@@ -30,8 +30,39 @@ def classify_anomaly(top_features: list[dict[str, float]]) -> tuple[str, str]:
             "text": "Network connection profile differs from the learned baseline; possible scan, C2 beaconing, or unusual data transfer.",
         },
         "process_activity_anomaly": {
-            "features": {"process_count", "thread_count", "user_process_count"},
+            "features": {
+                "process_count",
+                "thread_count",
+                "user_process_count",
+                "event_process_started_count",
+                "event_process_stopped_count",
+                "event_unique_processes",
+            },
             "text": "Process/thread profile differs from normal behavior; possible tool launch, automation, or suspicious workload.",
+        },
+        "identity_activity_anomaly": {
+            "features": {
+                "event_authentication_success_count",
+                "event_authentication_failure_count",
+                "event_session_started_count",
+                "event_session_ended_count",
+                "event_privilege_elevation_count",
+                "event_unique_users",
+                "event_unique_remote_sources",
+            },
+            "text": "Authentication or user-session behavior differs from the learned baseline.",
+        },
+        "software_change_anomaly": {
+            "features": {
+                "event_package_installed_count",
+                "event_package_removed_count",
+                "event_package_updated_count",
+            },
+            "text": "Installed software changed more than expected for this host profile.",
+        },
+        "collector_health_anomaly": {
+            "features": {"event_collector_error_count"},
+            "text": "One or more host sensors reported collection errors or reduced visibility.",
         },
         "storage_activity_anomaly": {
             "features": {"disk_read_bytes_per_sec", "disk_write_bytes_per_sec"},

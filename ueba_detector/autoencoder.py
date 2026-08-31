@@ -60,6 +60,7 @@ class NeuralAutoencoder:
         cls,
         samples: list[dict[str, Any]],
         *,
+        feature_names: list[str] | None = None,
         hidden_dim: int | None = None,
         epochs: int = 220,
         learning_rate: float = 0.015,
@@ -69,7 +70,10 @@ class NeuralAutoencoder:
         if not samples:
             raise ValueError("Need at least one training sample")
 
-        scaler = fit_scaler(samples, FEATURE_NAMES)
+        names = list(feature_names or FEATURE_NAMES)
+        if not names or len(names) != len(set(names)):
+            raise ValueError("feature_names must be a non-empty list of unique names")
+        scaler = fit_scaler(samples, names)
         x_train = [scaler.transform(sample) for sample in samples]
         input_dim = len(scaler.feature_names)
         hidden = hidden_dim or max(3, min(12, input_dim // 2))
@@ -160,6 +164,29 @@ class NeuralAutoencoder:
             severity=severity,
             top_features=top_features,
         )
+
+    def reconstruction_error(self, sample: dict[str, Any]) -> float:
+        return self._error(self.scaler.transform(sample))
+
+    def calibrate_threshold(
+        self,
+        samples: list[dict[str, Any]],
+        *,
+        quantile: float = 0.995,
+    ) -> float:
+        if not samples:
+            raise ValueError("Need at least one calibration sample")
+        if not 0.0 <= quantile <= 1.0:
+            raise ValueError("quantile must be between 0 and 1")
+        errors = [self.reconstruction_error(sample) for sample in samples]
+        mean_error = sum(errors) / len(errors)
+        variance = sum((error - mean_error) ** 2 for error in errors) / len(errors)
+        self.threshold = max(
+            self._quantile(errors, quantile),
+            mean_error + 3.0 * math.sqrt(variance),
+            1e-9,
+        )
+        return self.threshold
 
     def save(self, path: str | Path) -> None:
         target = Path(path)

@@ -64,3 +64,87 @@ def generate_test_samples(count: int = 120, seed: int = 8) -> list[dict[str, Any
         rows[idx]["cpu_percent"] = 93
 
     return rows
+
+
+def generate_security_events(
+    samples: list[dict[str, Any]],
+    *,
+    seed: int = 9,
+    inject_event_attacks: bool = False,
+) -> list[dict[str, Any]]:
+    rng = random.Random(seed)
+    events: list[dict[str, Any]] = []
+
+    def add(sample: dict[str, Any], event_type: str, data: dict[str, Any]) -> None:
+        events.append(
+            {
+                "timestamp": sample["timestamp"],
+                "host": sample["host"],
+                "event_type": event_type,
+                "data": data,
+            }
+        )
+
+    for idx, sample in enumerate(samples):
+        starts = max(0, int(rng.gauss(2.0, 1.0)))
+        stops = max(0, int(rng.gauss(1.8, 1.0)))
+        for process_idx in range(starts):
+            add(
+                sample,
+                "process_started",
+                {
+                    "actor": {"user": {"name": "demo-user"}},
+                    "process": {"name": f"normal-app-{process_idx % 4}"},
+                },
+            )
+        for process_idx in range(stops):
+            add(
+                sample,
+                "process_stopped",
+                {
+                    "actor": {"user": {"name": "demo-user"}},
+                    "process": {"name": f"normal-app-{process_idx % 4}"},
+                },
+            )
+        if idx % 45 == 0:
+            add(
+                sample,
+                "authentication_success",
+                {
+                    "actor": {"user": {"name": "demo-user"}},
+                    "source_endpoint": {"ip": "10.0.0.5"},
+                },
+            )
+
+        if sample.get("scenario") == "suspicious_process_burst":
+            for process_idx in range(20):
+                add(
+                    sample,
+                    "process_started",
+                    {
+                        "actor": {"user": {"name": "demo-user"}},
+                        "process": {"name": f"burst-tool-{process_idx}"},
+                    },
+                )
+
+        if inject_event_attacks and 10 <= idx < 16:
+            sample["scenario"] = "authentication_bruteforce"
+            for attempt in range(14):
+                add(
+                    sample,
+                    "authentication_failure",
+                    {
+                        "actor": {"user": {"name": "target-user"}},
+                        "source_endpoint": {"ip": f"203.0.113.{10 + attempt % 3}"},
+                    },
+                )
+
+        if inject_event_attacks and 20 <= idx < 23:
+            sample["scenario"] = "package_change_burst"
+            for package_idx in range(7):
+                add(
+                    sample,
+                    "package_installed",
+                    {"package": {"name": f"unexpected-package-{package_idx}", "version": "1.0"}},
+                )
+    return events
