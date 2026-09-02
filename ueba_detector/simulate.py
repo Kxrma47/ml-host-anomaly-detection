@@ -4,6 +4,8 @@ import random
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from .events import SecurityEvent, deterministic_event_id
+
 
 def _normal_sample(rng: random.Random, timestamp: datetime) -> dict[str, Any]:
     return {
@@ -76,13 +78,31 @@ def generate_security_events(
     events: list[dict[str, Any]] = []
 
     def add(sample: dict[str, Any], event_type: str, data: dict[str, Any]) -> None:
+        if event_type.startswith("process_"):
+            category, class_name = "System Activity", "Process Activity"
+            activity = "Launch" if event_type == "process_started" else "Terminate"
+        elif event_type.startswith("authentication_"):
+            category, class_name, activity = "Identity & Access Management", "Authentication", "Logon"
+        elif event_type.startswith("package_"):
+            category, class_name, activity = "Discovery", "Software Inventory Info", "Install"
+        else:
+            category, class_name, activity = "Uncategorized", "Base Event", "Other"
+        event_index = len(events)
         events.append(
-            {
-                "timestamp": sample["timestamp"],
-                "host": sample["host"],
-                "event_type": event_type,
-                "data": data,
-            }
+            SecurityEvent(
+                event_id=deterministic_event_id(
+                    "simulation", sample["timestamp"], event_type, event_index
+                ),
+                timestamp=str(sample["timestamp"]),
+                host=str(sample["host"]),
+                category_name=category,
+                class_name=class_name,
+                activity_name=activity,
+                event_type=event_type,
+                source="ueba_detector.simulate",
+                status="failure" if event_type == "authentication_failure" else "success",
+                data=data,
+            ).to_dict()
         )
 
     for idx, sample in enumerate(samples):

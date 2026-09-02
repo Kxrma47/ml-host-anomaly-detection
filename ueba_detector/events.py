@@ -5,6 +5,8 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import NAMESPACE_URL, uuid4, uuid5
 
+from .ocsf import build_ocsf_event
+
 
 SCHEMA_VERSION = "1.0.0"
 SEVERITIES = {"informational", "low", "medium", "high", "critical"}
@@ -55,4 +57,6 @@ class SecurityEvent:
             raise ValueError(f"Unsupported event severity: {self.severity}")
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        row = asdict(self)
+        row["ocsf"] = build_ocsf_event(row)
+        return row

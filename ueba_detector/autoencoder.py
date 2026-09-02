@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import json
 import math
+import platform
 import random
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from . import __version__
 from .features import FEATURE_NAMES, Scaler, fit_scaler
 
 
@@ -188,7 +191,7 @@ class NeuralAutoencoder:
         )
         return self.threshold
 
-    def save(self, path: str | Path) -> None:
+    def save(self, path: str | Path, *, provenance: dict[str, Any] | None = None) -> None:
         target = Path(path)
         target.parent.mkdir(parents=True, exist_ok=True)
         payload = {
@@ -202,6 +205,15 @@ class NeuralAutoencoder:
             "b2": self.b2,
             "threshold": self.threshold,
             "train_errors": self.train_errors,
+            "artifact": {
+                "schema_version": "1.0.0",
+                "created_at": datetime.now(tz=timezone.utc).isoformat().replace("+00:00", "Z"),
+                "package_version": __version__,
+                "python_version": platform.python_version(),
+                "feature_count": len(self.scaler.feature_names),
+                "training_samples": len(self.train_errors),
+                "provenance": provenance or {},
+            },
         }
         target.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
 

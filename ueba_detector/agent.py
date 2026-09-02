@@ -83,7 +83,7 @@ class SecurityAgent:
     def collect_once(self, *, now_epoch: float | None = None) -> list[dict[str, Any]]:
         now = time.time() if now_epoch is None else now_epoch
         if self._state is None:
-            self._state = self.state_store.load()
+            self._state = self.state_store.load_or_recover()
         collector_states = self._state["collectors"]
         schedule = self._state["schedule"]
         events: list[SecurityEvent] = []
@@ -114,11 +114,15 @@ class SecurityAgent:
             except OSError:
                 pass
 
-        self._state["agent"] = {
-            "host": self.host,
-            "last_cycle_epoch": now,
-            "last_event_count": len(rows),
-        }
+        agent_state = dict(self._state.get("agent") or {})
+        agent_state.update(
+            {
+                "host": self.host,
+                "last_cycle_epoch": now,
+                "last_event_count": len(rows),
+            }
+        )
+        self._state["agent"] = agent_state
         # State follows event persistence, giving at-least-once behavior after a crash.
         self.state_store.save(self._state)
         return rows

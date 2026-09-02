@@ -22,7 +22,8 @@ class StorageTests(unittest.TestCase):
 
         self.assertTrue(any(segment.name.endswith(".jsonl.gz") for segment in segments))
         self.assertEqual(loaded, rows)
-        self.assertEqual(set(modes), {0o600})
+        if os.name == "posix":
+            self.assertEqual(set(modes), {0o600})
 
     def test_retention_removes_only_expired_rotated_segments(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -1,6 +1,6 @@
 [project]
 name = "ueba-detector"
-version = "0.4.0"
+version = "0.6.0"
 description = "Host UEBA anomaly detector and normalized security event collector"
 requires-python = ">=3.10"
 dependencies = ["psutil>=5.9"]

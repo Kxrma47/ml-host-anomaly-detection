@@ -7,8 +7,10 @@ import time
 from collections import Counter
 from pathlib import Path
 
+from .adapters import DATASET_REGISTRY, adapt_rows, read_source_rows
 from .agent import SecurityAgent
 from .autoencoder import NeuralAutoencoder
+from .baselines import compare_detectors, select_clean_training_rows
 from .combined import (
     COMBINED_FEATURE_NAMES,
     build_combined_file,
@@ -25,10 +27,26 @@ from .evaluation import (
     save_rule_configuration,
     write_evaluation_outputs,
 )
+from .offline import (
+    compare_drift,
+    correlate_incidents,
+    group_alerts,
+    replay_records,
+    run_stress_test,
+)
+from .provenance import build_provenance, sha256_file, verify_provenance, write_provenance
 from .reporting import build_anomaly_event, summarize_jsonl, write_text_summary
 from .readiness import audit_training_data, write_readiness_report
 from .simulate import generate_normal_samples, generate_security_events, generate_test_samples
-from .storage import RotatingJsonlWriter, read_jsonl, write_jsonl
+from .storage import RotatingJsonlWriter, read_jsonl, read_jsonl_dataset, write_jsonl
+from .standards import run_standards_audit, write_standards_reports
+from .validation import validate_dataset
+
+
+def _write_json(path: str | Path, payload: dict[str, object]) -> None:
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
 def cmd_collect(args: argparse.Namespace) -> None:
@@ -222,8 +240,9 @@ def cmd_train_combined(args: argparse.Namespace) -> None:
         args.features_output,
         window_seconds=args.window_seconds,
     )
+    training_rows, selection = select_clean_training_rows(rows)
     model = NeuralAutoencoder.fit(
-        rows,
+        training_rows,
         feature_names=COMBINED_FEATURE_NAMES,
         hidden_dim=args.hidden_dim,
         epochs=args.epochs,
@@ -231,8 +250,26 @@ def cmd_train_combined(args: argparse.Namespace) -> None:
         threshold_quantile=args.threshold_quantile,
         seed=args.seed,
     )
-    model.save(args.model)
-    print(f"trained combined model on {len(rows)} windows and {len(COMBINED_FEATURE_NAMES)} features")
+    model.save(
+        args.model,
+        provenance=build_provenance(
+            dataset_paths=[args.metrics, args.events],
+            parameters={
+                "command": "train-combined",
+                "windows": len(training_rows),
+                "selection": selection,
+                "window_seconds": args.window_seconds,
+                "epochs": args.epochs,
+                "learning_rate": args.learning_rate,
+                "threshold_quantile": args.threshold_quantile,
+                "seed": args.seed,
+            },
+        ),
+    )
+    print(
+        f"trained combined model on {len(training_rows)}/{len(rows)} eligible windows "
+        f"and {len(COMBINED_FEATURE_NAMES)} features"
+    )
     print(f"features saved to {args.features_output}")
     print(f"model saved to {args.model}")
     print(f"anomaly threshold: {model.threshold:.6f}")
@@ -329,16 +366,31 @@ def cmd_evaluate_combined(args: argparse.Namespace) -> None:
 
 def cmd_train(args: argparse.Namespace) -> None:
     samples = read_jsonl(args.input)
+    training_samples, selection = select_clean_training_rows(samples)
     model = NeuralAutoencoder.fit(
-        samples,
+        training_samples,
         hidden_dim=args.hidden_dim,
         epochs=args.epochs,
         learning_rate=args.learning_rate,
         threshold_quantile=args.threshold_quantile,
         seed=args.seed,
     )
-    model.save(args.model)
-    print(f"trained on {len(samples)} samples")
+    model.save(
+        args.model,
+        provenance=build_provenance(
+            dataset_paths=[args.input],
+            parameters={
+                "command": "train",
+                "samples": len(training_samples),
+                "selection": selection,
+                "epochs": args.epochs,
+                "learning_rate": args.learning_rate,
+                "threshold_quantile": args.threshold_quantile,
+                "seed": args.seed,
+            },
+        ),
+    )
+    print(f"trained on {len(training_samples)}/{len(samples)} eligible samples")
     print(f"model saved to {args.model}")
     print(f"anomaly threshold: {model.threshold:.6f}")
 
@@ -554,6 +606,197 @@ def demo_metrics(scores: list[dict[str, object]]) -> dict[str, object]:
     }
 
 
+def cmd_validate_dataset(args: argparse.Namespace) -> None:
+    report = validate_dataset(args.input, kind=args.kind)
+    _write_json(args.output, report)
+    print(
+        f"validated {report['records']} {report['kind']} records; "
+        f"quality={float(report['quality_score']):.1f}; valid={report['valid']}"
+    )
+    print(f"report saved to {args.output}")
+
+
+def cmd_replay(args: argparse.Namespace) -> None:
+    rows = read_jsonl_dataset(args.input)
+    model = NeuralAutoencoder.load(args.model) if args.model else None
+
+    def handle(row: dict[str, object]) -> dict[str, object]:
+        if model is None:
+            return dict(row)
+        score = model.score(row)
+        return {
+            "timestamp": row.get("timestamp"),
+            "host": row.get("host", "unknown"),
+            "scenario": row.get("scenario"),
+            "ratio": score.ratio,
+            "is_anomaly": score.is_anomaly,
+            "severity": score.severity,
+            "top_features": score.top_features,
+        }
+
+    outputs, report = replay_records(
+        rows,
+        handle,
+        speed=args.speed,
+        max_sleep=args.max_sleep,
+        deduplicate=not args.keep_duplicates,
+    )
+    write_jsonl(args.output, outputs)
+    _write_json(args.report, report)
+    print(
+        f"replayed {report['replayed_records']}/{report['input_records']} records at "
+        f"{float(report['records_per_second']):.1f} records/second"
+    )
+    print(f"replay output saved to {args.output}")
+
+
+def cmd_correlate(args: argparse.Namespace) -> None:
+    rows = read_jsonl_dataset(args.input)
+    groups = group_alerts(rows, cooldown_seconds=args.cooldown)
+    grouped_signals = [
+        {
+            "timestamp": group["first_timestamp"],
+            "host": group["host"],
+            "severity": group["severity"],
+            "event_type": "grouped_alert",
+            "description": f"{group['count']} related signal(s): {group['fingerprint']}",
+            "group": group,
+        }
+        for group in groups
+    ]
+    incidents = correlate_incidents(grouped_signals, max_gap_seconds=args.max_gap)
+    write_jsonl(args.groups_output, groups)
+    write_jsonl(args.output, incidents)
+    print(f"grouped {len(rows)} signals into {len(groups)} alert groups and {len(incidents)} incidents")
+    print(f"incident timeline saved to {args.output}")
+
+
+def cmd_detect_drift(args: argparse.Namespace) -> None:
+    reference = read_jsonl_dataset(args.reference)
+    current = read_jsonl_dataset(args.current)
+    report = compare_drift(
+        reference,
+        current,
+        shift_threshold=args.shift_threshold,
+        feature_ratio_threshold=args.feature_ratio,
+    )
+    _write_json(args.output, report)
+    print(
+        f"drift detected: {report['drift_detected']}; "
+        f"features: {report['drifted_features']}/{report['feature_count']}"
+    )
+    print(f"drift report saved to {args.output}")
+
+
+def cmd_compare_models(args: argparse.Namespace) -> None:
+    rows = read_jsonl_dataset(args.input)
+    training_rows = read_jsonl_dataset(args.training_input) if args.training_input else rows
+    report = compare_detectors(
+        training_rows,
+        evaluation_rows=rows if args.training_input else None,
+        epochs=args.epochs,
+        threshold_quantile=args.threshold_quantile,
+        seed=args.seed,
+    )
+    _write_json(args.output, report)
+    for name, metrics in report["methods"].items():
+        detail = f"{metrics['anomalies']} anomalies ({float(metrics['anomaly_rate']):.1%})"
+        if metrics.get("recall") is not None:
+            detail += f", recall={float(metrics['recall']):.1%}"
+        if metrics.get("false_positive_rate") is not None:
+            detail += f", FPR={float(metrics['false_positive_rate']):.1%}"
+        print(f"{name}: {detail}")
+    print(f"comparison saved to {args.output}")
+
+
+def cmd_adapt_dataset(args: argparse.Namespace) -> None:
+    source = read_source_rows(args.input, fmt=args.format)
+    rows = adapt_rows(args.dataset, source, salt=args.salt)
+    write_jsonl(args.output, rows)
+    manifest = {
+        "dataset": args.dataset,
+        "input": str(args.input),
+        "output": str(args.output),
+        "source_rows": len(source),
+        "normalized_rows": len(rows),
+        "input_sha256": sha256_file(args.input),
+        **DATASET_REGISTRY[args.dataset],
+    }
+    _write_json(args.manifest, manifest)
+    print(f"adapted {len(rows)} {args.dataset} records into normalized events")
+    print(f"manifest saved to {args.manifest}")
+
+
+def cmd_stress_test(args: argparse.Namespace) -> None:
+    report = run_stress_test(windows=args.windows, seed=args.seed)
+    _write_json(args.output, report)
+    print(
+        f"processed {report['combined_rows']} windows at "
+        f"{float(report['windows_per_second']):.1f} windows/second; "
+        f"peak memory={int(report['peak_memory_bytes']) / 1024 / 1024:.1f} MiB"
+    )
+    print(f"stress report saved to {args.output}")
+
+
+def cmd_model_card(args: argparse.Namespace) -> None:
+    provenance = build_provenance(
+        dataset_paths=args.dataset,
+        parameters={"model": str(args.model), "purpose": args.purpose},
+    )
+    model_path = Path(args.model)
+    if model_path.exists():
+        provenance["model"] = {
+            "path": str(model_path),
+            "bytes": model_path.stat().st_size,
+            "sha256": sha256_file(model_path),
+        }
+    write_provenance(args.output, provenance)
+    print(f"model provenance saved to {args.output}")
+
+
+def cmd_verify_provenance(args: argparse.Namespace) -> None:
+    payload = json.loads(Path(args.input).read_text(encoding="utf-8"))
+    provenance = payload.get("artifact", {}).get("provenance") if isinstance(payload, dict) else None
+    if not isinstance(provenance, dict):
+        provenance = payload
+    if not isinstance(provenance, dict):
+        raise ValueError("input does not contain provenance metadata")
+    report = verify_provenance(provenance)
+    _write_json(args.output, report)
+    print(f"dataset provenance integrity: {'PASS' if report['valid'] else 'FAIL'}")
+    print(f"verified {report['datasets']} dataset artifact(s)")
+    print(f"report saved to {args.output}")
+
+
+def cmd_standards_test(args: argparse.Namespace) -> None:
+    report = run_standards_audit(
+        readiness_path=args.readiness,
+        metrics_validation_path=args.metrics_validation,
+        events_validation_path=args.events_validation,
+        events_path=args.events,
+        model_comparison_path=args.model_comparison,
+        stress_path=args.stress,
+        run_tests=not args.skip_unit_tests,
+        test_directory=args.test_directory,
+        minimum_coverage=args.minimum_coverage,
+        minimum_clean_windows=args.minimum_clean_windows,
+        minimum_recall=args.minimum_recall,
+        maximum_false_positive_rate=args.maximum_false_positive_rate,
+        minimum_windows_per_second=args.minimum_windows_per_second,
+        maximum_peak_memory_mib=args.maximum_peak_memory_mib,
+    )
+    write_standards_reports(args.output, args.markdown_output, report)
+    state = "PASS" if report["automated_release_ready"] else "FAIL"
+    print(f"automated standards release gate: {state}")
+    for status, count in report["summary"].items():
+        print(f"{status}: {count}")
+    print(f"certification status: {report['certification_status']}")
+    print(f"JSON report saved to {args.output}")
+    print(f"Markdown report saved to {args.markdown_output}")
+    if not report["automated_release_ready"]:
+        raise SystemExit(1)
+
+
 def cmd_summarize(args: argparse.Namespace) -> None:
     summarize_jsonl(args.input, args.output)
     print(f"summary saved to {args.output}")
@@ -741,6 +984,111 @@ def build_parser() -> argparse.ArgumentParser:
     monitor.add_argument("--duration")
     monitor.add_argument("--cooldown", type=float, default=60.0)
     monitor.set_defaults(func=cmd_monitor)
+
+    validate = sub.add_parser(
+        "validate-dataset",
+        help="validate schema, chronology, values, duplicates, and persisted-secret safety",
+    )
+    validate.add_argument("--input", required=True)
+    validate.add_argument("--kind", choices=("auto", "metrics", "events", "combined"), default="auto")
+    validate.add_argument("--output", default="reports/dataset_validation.json")
+    validate.set_defaults(func=cmd_validate_dataset)
+
+    replay = sub.add_parser("replay", help="replay a recorded JSONL stream deterministically")
+    replay.add_argument("--input", required=True)
+    replay.add_argument("--model", help="optionally score replayed metric or combined rows")
+    replay.add_argument("--output", default="reports/replay_output.jsonl")
+    replay.add_argument("--report", default="reports/replay_report.json")
+    replay.add_argument("--speed", type=float, default=0.0, help="time acceleration; 0 disables sleeping")
+    replay.add_argument("--max-sleep", type=float, default=1.0)
+    replay.add_argument("--keep-duplicates", action="store_true")
+    replay.set_defaults(func=cmd_replay)
+
+    correlate = sub.add_parser(
+        "correlate-incidents",
+        help="suppress repeated alerts and produce host incident timelines",
+    )
+    correlate.add_argument("--input", required=True)
+    correlate.add_argument("--groups-output", default="reports/alert_groups.jsonl")
+    correlate.add_argument("--output", default="reports/incidents.jsonl")
+    correlate.add_argument("--cooldown", type=float, default=300.0)
+    correlate.add_argument("--max-gap", type=float, default=900.0)
+    correlate.set_defaults(func=cmd_correlate)
+
+    drift = sub.add_parser("detect-drift", help="compare robust feature profiles across time periods")
+    drift.add_argument("--reference", required=True)
+    drift.add_argument("--current", required=True)
+    drift.add_argument("--output", default="reports/drift.json")
+    drift.add_argument("--shift-threshold", type=float, default=4.0)
+    drift.add_argument("--feature-ratio", type=float, default=0.2)
+    drift.set_defaults(func=cmd_detect_drift)
+
+    compare = sub.add_parser(
+        "compare-models",
+        help="compare autoencoder, robust Z-score, and EWMA detectors chronologically",
+    )
+    compare.add_argument("--input", required=True)
+    compare.add_argument("--training-input", help="separate clean baseline; --input becomes untouched test data")
+    compare.add_argument("--output", default="reports/model_comparison.json")
+    compare.add_argument("--epochs", type=int, default=80)
+    compare.add_argument("--threshold-quantile", type=float, default=0.995)
+    compare.add_argument("--seed", type=int, default=42)
+    compare.set_defaults(func=cmd_compare_models)
+
+    adapt = sub.add_parser(
+        "adapt-dataset",
+        help="normalize a supported public dataset into private OCSF-aligned events",
+    )
+    adapt.add_argument("--dataset", choices=tuple(DATASET_REGISTRY), required=True)
+    adapt.add_argument("--input", required=True)
+    adapt.add_argument("--format", choices=("auto", "csv", "jsonl", "json", "text"), default="auto")
+    adapt.add_argument("--salt", default="ueba-dataset")
+    adapt.add_argument("--output", default="data/imported_events.jsonl")
+    adapt.add_argument("--manifest", default="reports/dataset_manifest.json")
+    adapt.set_defaults(func=cmd_adapt_dataset)
+
+    stress = sub.add_parser("stress-test", help="measure synthetic pipeline throughput and peak memory")
+    stress.add_argument("--windows", type=int, default=10_000)
+    stress.add_argument("--seed", type=int, default=101)
+    stress.add_argument("--output", default="reports/stress_test.json")
+    stress.set_defaults(func=cmd_stress_test)
+
+    model_card = sub.add_parser("model-card", help="write dataset and build provenance for a model")
+    model_card.add_argument("--model", required=True)
+    model_card.add_argument("--dataset", action="append", default=[])
+    model_card.add_argument("--purpose", default="host anomaly detection")
+    model_card.add_argument("--output", default="reports/model_provenance.json")
+    model_card.set_defaults(func=cmd_model_card)
+
+    verify = sub.add_parser(
+        "verify-provenance",
+        help="verify recorded dataset sizes and SHA-256 hashes against a model or sidecar",
+    )
+    verify.add_argument("--input", required=True)
+    verify.add_argument("--output", default="reports/provenance_verification.json")
+    verify.set_defaults(func=cmd_verify_provenance)
+
+    standards = sub.add_parser(
+        "standards-test",
+        help="run machine-verifiable international standards-readiness release gates",
+    )
+    standards.add_argument("--readiness", default="reports/training_readiness.json")
+    standards.add_argument("--metrics-validation", default="reports/dataset_validation.json")
+    standards.add_argument("--events-validation", default="reports/event_validation.json")
+    standards.add_argument("--events", default="data/mac_events.jsonl")
+    standards.add_argument("--model-comparison", default="reports/model_comparison.json")
+    standards.add_argument("--stress", default="reports/stress_test.json")
+    standards.add_argument("--test-directory", default="tests")
+    standards.add_argument("--skip-unit-tests", action="store_true")
+    standards.add_argument("--minimum-coverage", type=float, default=0.95)
+    standards.add_argument("--minimum-clean-windows", type=int, default=10_080)
+    standards.add_argument("--minimum-recall", type=float, default=0.90)
+    standards.add_argument("--maximum-false-positive-rate", type=float, default=0.10)
+    standards.add_argument("--minimum-windows-per-second", type=float, default=1_000.0)
+    standards.add_argument("--maximum-peak-memory-mib", type=float, default=256.0)
+    standards.add_argument("--output", default="reports/standards_readiness.json")
+    standards.add_argument("--markdown-output", default="reports/standards_readiness.md")
+    standards.set_defaults(func=cmd_standards_test)
 
     demo = sub.add_parser("demo", help="generate synthetic data, train, detect anomalies, and write reports")
     demo.add_argument("--output-dir", default="examples/demo_run")

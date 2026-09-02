@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +27,23 @@ class JsonStateStore:
         value.setdefault("schedule", {})
         value.setdefault("agent", {})
         return value
+
+    def load_or_recover(self) -> dict[str, Any]:
+        try:
+            return self.load()
+        except ValueError:
+            timestamp = datetime.now(tz=timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+            quarantined = self.path.with_name(f"{self.path.name}.corrupt.{timestamp}")
+            try:
+                os.replace(self.path, quarantined)
+            except OSError:
+                pass
+            return {
+                "state_version": 1,
+                "collectors": {},
+                "schedule": {},
+                "agent": {"recovered_corrupt_state": str(quarantined)},
+            }
 
     def save(self, state: dict[str, Any]) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)

@@ -2,6 +2,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from ueba_detector.agent import SecurityAgent
 from ueba_detector.event_collectors.base import CollectionResult
@@ -61,8 +62,9 @@ class AgentTests(unittest.TestCase):
             self.assertEqual(first[0]["data"]["token"], "[REDACTED]")
             self.assertNotIn("fake-token", first[1]["data"]["message"])
             self.assertEqual(len(read_jsonl(output)), 3)
-            self.assertEqual(os.stat(output).st_mode & 0o777, 0o600)
-            self.assertEqual(os.stat(state).st_mode & 0o777, 0o600)
+            if os.name == "posix":
+                self.assertEqual(os.stat(output).st_mode & 0o777, 0o600)
+                self.assertEqual(os.stat(state).st_mode & 0o777, 0o600)
 
     def test_state_store_rejects_corrupt_state(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -70,6 +72,44 @@ class AgentTests(unittest.TestCase):
             path.write_text("not-json", encoding="utf-8")
             with self.assertRaises(ValueError):
                 JsonStateStore(path).load()
+
+    def test_agent_quarantines_corrupt_state_and_recovers(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            output = root / "events.jsonl"
+            state = root / "state.json"
+            state.write_text("not-json", encoding="utf-8")
+            agent = SecurityAgent(
+                [CountingCollector()],
+                output=output,
+                state_path=state,
+                heartbeat_interval=60,
+                host="host-1",
+            )
+            rows = agent.collect_once(now_epoch=100.0)
+
+            self.assertEqual(len(rows), 2)
+            self.assertTrue(state.exists())
+            self.assertEqual(len(list(root.glob("state.json.corrupt.*"))), 1)
+            persisted = JsonStateStore(state).load()
+            self.assertIn("recovered_corrupt_state", persisted["agent"])
+
+    def test_persistence_failure_does_not_advance_state(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            output = root / "events.jsonl"
+            state = root / "state.json"
+            agent = SecurityAgent(
+                [CountingCollector()],
+                output=output,
+                state_path=state,
+                heartbeat_interval=60,
+                host="host-1",
+            )
+            with patch.object(agent.writer, "write_many", side_effect=OSError("disk full")):
+                with self.assertRaises(OSError):
+                    agent.collect_once(now_epoch=100.0)
+            self.assertFalse(state.exists())
 
 
 if __name__ == "__main__":
