@@ -6,7 +6,7 @@
 models/ueba_model.json
 
 Обучающая выборка:
-data/baseline_24h_tcp.jsonl
+локальная выборка хоста (не публикуется)
 
 Длительность обучающей выборки:
 24.007 часа
@@ -41,7 +41,7 @@ Model:
 models/ueba_model.json
 
 Training dataset:
-data/baseline_24h_tcp.jsonl
+local host baseline (not published)
 
 Training dataset duration:
 24.007 hours

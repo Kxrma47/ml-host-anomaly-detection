@@ -49,7 +49,7 @@ ueba_detector/reporting.py       JSONL-отчеты и объяснения ан
 ueba_detector/cli.py             команды collect, train, monitor, score, demo
 tests/                           unit-тесты
 examples/demo_run/               демонстрационный прогон с аномалиями
-data/baseline_24h_tcp.jsonl      реальная обучающая выборка за 24 часа
+data/baseline_24h_tcp.jsonl      локальная выборка хоста (не публикуется)
 models/ueba_model.json           обученная модель
 reports/live_monitor_summary.txt краткий результат живого мониторинга
 reports/demo_anomalies_summary.txt краткое описание demo-аномалий
@@ -303,7 +303,7 @@ ueba_detector/reporting.py       JSONL reports and anomaly explanations
 ueba_detector/cli.py             collect, train, monitor, score, demo commands
 tests/                           unit tests
 examples/demo_run/               demo run with injected anomalies
-data/baseline_24h_tcp.jsonl      real 24-hour training dataset
+data/baseline_24h_tcp.jsonl      local host baseline (not published)
 models/ueba_model.json           trained model
 reports/live_monitor_summary.txt short live monitoring result
 reports/demo_anomalies_summary.txt short demo anomaly summary

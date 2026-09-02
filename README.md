@@ -85,8 +85,10 @@ bursts. With the checked-in defaults it detects all 26 injected anomalies, misse
 none, and flags 3 of 94 normal samples. That is 100% recall on this synthetic
 test, not a claim of 100% accuracy in the real world.
 
-The repository also contains an anonymized 24-hour workstation baseline with
-1,439 samples. The full clean-room instructions and expected files are in
+Real host recordings and training baselines are intentionally not published.
+The checked-in examples are deterministic synthetic data, so the benchmark can
+be reproduced without exposing activity collected from a real machine. The full
+clean-room instructions and expected files are in
 [docs/reproducibility.md](docs/reproducibility.md).
 
 To run only the demos:
@@ -318,57 +320,17 @@ The reasoning and remaining gaps are documented in the
 [threat model](docs/threat-model.md), and
 [Common Criteria Security Target outline](docs/security-target.md).
 
-## Browser investigation console
+## Hosted companion
 
-The public prototype is available at
-[kxrma47.github.io/ml-host-anomaly-detection](https://kxrma47.github.io/ml-host-anomaly-detection/).
-The Cloudflare Pages production build, including the optional aggregate API, is
-available at [hostwatch-console.pages.dev](https://hostwatch-console.pages.dev/).
+[HostWatch Console](https://hostwatch-console.pages.dev/) is a public,
+interactive demonstration of the monitoring and investigation experience built
+around this project. It can replay normal host activity and focused login,
+network-scan, and process-burst scenarios so visitors can see how model signals
+become alerts and investigation decisions.
 
-The `web/` directory contains a second interface for day-to-day investigation.
-It is not a project introduction page. It opens directly on an operational
-dashboard with three clearly separated workspaces.
-
-The host workspace imports metric JSONL, security-event JSONL, a trained model,
-or audit reports. An analyst can inspect incidents and alerts, acknowledge or
-resolve findings, compare drift, review baseline readiness and data quality, and
-export a compact investigation report.
-
-The browser workspace is a real current-tab monitor. After it is started, it
-records resource timing, origin counts, transfer sizes when the browser exposes
-them, online state, and tab visibility changes. Query strings and
-identifier-looking path segments are removed before display. A normal web page
-cannot see other tabs or complete browser history, so the interface says that an
-installed extension with explicit permissions is required for that later stage.
-
-The website workspace has two modes. Public posture mode runs real DNS queries
-through Cloudflare DNS-over-HTTPS and requests an HTTP-header assessment from
-MDN Observatory. Each provider can fail independently without erasing the rest
-of the report. Owner telemetry mode locally imports normalized CDN, WAF, or web
-server request events and applies transparent rules for login-failure bursts,
-endpoint reconnaissance, request floods, and repeated denials. Its built-in
-demonstration uses only reserved documentation IP addresses and is always marked
-as demo data.
-
-Files are parsed in a Web Worker and stored in the browser's IndexedDB. The
-hosted static application does not upload evidence anywhere. Secret-looking
-fields are redacted during import even when an older recording contains them.
-The application includes deterministic host and website-telemetry demonstrations,
-so a local preview remains useful without asking visitors to provide data. Public
-posture results are not presented as proof that a website is secure, and source
-IP addresses are described as observed network addresses rather than identities.
-
-```bash
-cd web
-npm install
-npm run test
-npm run build
-npm run dev
-```
-
-An optional Cloudflare Pages Function accepts only aggregate host snapshots. Its
-schema rejects arbitrary or raw fields and requires an ingest key. Setup details
-and the D1 migration are in [web/DEPLOYMENT.md](web/DEPLOYMENT.md).
+The hosted application is maintained separately. This repository contains the
+host ML pipeline, tests, documentation, and reproducible synthetic examples; it
+does not contain the website source or private host recordings.
 
 ## Where the project stands
 

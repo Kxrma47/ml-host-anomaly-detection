@@ -5,6 +5,9 @@ __pycache__/
 logs/
 *.log
 *.pid
+# Host recordings and derived training windows stay local.
+data/*.jsonl
+data/*.jsonl.gz
 reports/live_anomalies.jsonl
 data/security_events.jsonl
 data/agent_state.json
@@ -36,8 +39,3 @@ data/imported_events.jsonl
 models/evaluated_combined_model.json
 models/evaluated_rules.json
 models/mac_combined_rules.json
-web/node_modules/
-web/dist/
-web/playwright-report/
-web/test-results/
-web/*.tsbuildinfo
