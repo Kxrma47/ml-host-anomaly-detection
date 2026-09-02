@@ -322,6 +322,8 @@ The reasoning and remaining gaps are documented in the
 
 The public prototype is available at
 [kxrma47.github.io/ml-host-anomaly-detection](https://kxrma47.github.io/ml-host-anomaly-detection/).
+The Cloudflare Pages production build, including the optional aggregate API, is
+available at [hostwatch-console.pages.dev](https://hostwatch-console.pages.dev/).
 
 The `web/` directory contains a second interface for day-to-day investigation.
 It is not a project introduction page. It opens directly on an operational
