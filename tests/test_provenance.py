@@ -14,7 +14,7 @@ class ProvenanceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             dataset = root / "data.jsonl"
-            dataset.write_text('{"value": 1}\n', encoding="utf-8")
+            dataset.write_bytes(b'{"value": 1}\n')
             provenance = build_provenance(dataset_paths=[dataset], parameters={"epochs": 2})
             model = NeuralAutoencoder.fit(generate_normal_samples(count=20, seed=207), epochs=2)
             model_path = root / "model.json"
