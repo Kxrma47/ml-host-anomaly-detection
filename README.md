@@ -328,7 +328,7 @@ resolve findings; compare drift; review baseline readiness and data quality; and
 export a compact investigation report.
 
 Files are parsed in a Web Worker and stored in the browser's IndexedDB. The
-static GitHub Pages version does not upload evidence anywhere. Secret-looking
+hosted static application does not upload evidence anywhere. Secret-looking
 fields are redacted during import even when an older recording contains them.
 The application includes a deterministic demonstration workspace, so the public
 URL remains useful without asking visitors to provide host data.
