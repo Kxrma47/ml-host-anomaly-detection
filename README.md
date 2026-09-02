@@ -322,16 +322,36 @@ The reasoning and remaining gaps are documented in the
 
 The `web/` directory contains a second interface for day-to-day investigation.
 It is not a project introduction page. It opens directly on an operational
-dashboard where an analyst can import metric JSONL, security-event JSONL, a
-trained model, or audit reports; inspect incidents and alerts; acknowledge or
-resolve findings; compare drift; review baseline readiness and data quality; and
+dashboard with three clearly separated workspaces.
+
+The host workspace imports metric JSONL, security-event JSONL, a trained model,
+or audit reports. An analyst can inspect incidents and alerts, acknowledge or
+resolve findings, compare drift, review baseline readiness and data quality, and
 export a compact investigation report.
+
+The browser workspace is a real current-tab monitor. After it is started, it
+records resource timing, origin counts, transfer sizes when the browser exposes
+them, online state, and tab visibility changes. Query strings and
+identifier-looking path segments are removed before display. A normal web page
+cannot see other tabs or complete browser history, so the interface says that an
+installed extension with explicit permissions is required for that later stage.
+
+The website workspace has two modes. Public posture mode runs real DNS queries
+through Cloudflare DNS-over-HTTPS and requests an HTTP-header assessment from
+MDN Observatory. Each provider can fail independently without erasing the rest
+of the report. Owner telemetry mode locally imports normalized CDN, WAF, or web
+server request events and applies transparent rules for login-failure bursts,
+endpoint reconnaissance, request floods, and repeated denials. Its built-in
+demonstration uses only reserved documentation IP addresses and is always marked
+as demo data.
 
 Files are parsed in a Web Worker and stored in the browser's IndexedDB. The
 hosted static application does not upload evidence anywhere. Secret-looking
 fields are redacted during import even when an older recording contains them.
-The application includes a deterministic demonstration workspace, so the public
-URL remains useful without asking visitors to provide host data.
+The application includes deterministic host and website-telemetry demonstrations,
+so a local preview remains useful without asking visitors to provide data. Public
+posture results are not presented as proof that a website is secure, and source
+IP addresses are described as observed network addresses rather than identities.
 
 ```bash
 cd web
