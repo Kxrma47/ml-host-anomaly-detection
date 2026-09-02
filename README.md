@@ -320,6 +320,9 @@ The reasoning and remaining gaps are documented in the
 
 ## Browser investigation console
 
+The public prototype is available at
+[kxrma47.github.io/ml-host-anomaly-detection](https://kxrma47.github.io/ml-host-anomaly-detection/).
+
 The `web/` directory contains a second interface for day-to-day investigation.
 It is not a project introduction page. It opens directly on an operational
 dashboard with three clearly separated workspaces.
