@@ -39,3 +39,11 @@ data/imported_events.jsonl
 models/evaluated_combined_model.json
 models/evaluated_rules.json
 models/mac_combined_rules.json
+models/mac_combined_model.json
+reports/alert_review.csv
+reports/alert_review.html
+reports/review_summary.json
+reports/shadow_*.jsonl
+data/shadow_*.jsonl
+data/shadow_*.json
+data/shadow_identity_salt

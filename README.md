@@ -224,8 +224,48 @@ Then calibrate the host-specific rules and score the windows:
   --model models/mac_combined_model.json \
   --rules models/mac_combined_rules.json \
   --input data/combined_train.jsonl \
-  --report reports/combined_anomalies.jsonl
+    --report reports/combined_anomalies.jsonl
 ```
+
+The resulting alerts should be reviewed before they are treated as attacks. The
+review command creates a stable ID for every alert and an editable CSV without
+copying the raw sample into the review file:
+
+```bash
+.venv/bin/python -m ueba_detector review-alerts \
+  --input reports/combined_anomalies.jsonl
+```
+
+Set each CSV label to `benign`, `suspicious`, or `confirmed_attack`, add a short
+analyst note, and validate the work with `review-summary`. Those decisions are
+the missing ground truth needed to measure real precision and retrain on a
+cleaner baseline.
+
+## Running the trained detector in shadow mode
+
+Shadow mode collects and scores new one-minute windows without blocking
+processes or changing the host. Raw metrics, normalized events, scores, and
+alerts stay in local mode-600 files. An optional cloud connection sends only a
+pseudonymous host ID and aggregate counts; it cannot accept event details.
+
+```bash
+.venv/bin/python -m ueba_detector shadow-monitor \
+  --model models/mac_combined_model.json \
+  --rules models/mac_combined_rules.json \
+  --duration 72h
+```
+
+On macOS, the installer runs the same command as a user LaunchAgent and wraps it
+with `caffeinate -im`, so idle system sleep does not stop the monitoring period:
+
+```bash
+./scripts/install_macos_shadow_agent.sh \
+  models/mac_combined_model.json models/mac_combined_rules.json
+```
+
+The lid must remain open. macOS does not permit `caffeinate` to defeat lid-close
+sleep. Remove the service with `./scripts/uninstall_macos_shadow_agent.sh`;
+recorded evidence is deliberately left in `~/Library/Application Support/HostWatch`.
 
 For a chronological train/validation/test evaluation directly from the raw
 files, use:

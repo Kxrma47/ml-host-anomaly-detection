@@ -36,9 +36,11 @@ from .offline import (
 )
 from .provenance import build_provenance, sha256_file, verify_provenance, write_provenance
 from .reporting import build_anomaly_event, summarize_jsonl, write_text_summary
+from .review import build_review_rows, summarize_review_csv, write_review_csv, write_review_html
 from .readiness import audit_training_data, write_readiness_report
+from .shadow import ShadowMonitor, default_cloud_host_id, read_ingest_key
 from .simulate import generate_normal_samples, generate_security_events, generate_test_samples
-from .storage import RotatingJsonlWriter, read_jsonl, read_jsonl_dataset, write_jsonl
+from .storage import append_jsonl, RotatingJsonlWriter, read_jsonl, read_jsonl_dataset, write_jsonl
 from .standards import run_standards_audit, write_standards_reports
 from .validation import validate_dataset
 
@@ -157,6 +159,40 @@ def cmd_collect_all(args: argparse.Namespace) -> None:
             time.sleep(min(event_interval, until_metric))
     except KeyboardInterrupt:
         print("combined collection stopped")
+
+
+def cmd_shadow_monitor(args: argparse.Namespace) -> None:
+    model = NeuralAutoencoder.load(args.model)
+    rules = load_rule_thresholds(args.rules) if args.rules else None
+    agent = SecurityAgent(
+        _build_event_collectors(args),
+        output=args.events_output,
+        state_path=args.state,
+        heartbeat_interval=args.heartbeat_interval,
+        max_file_bytes=50 * 1024 * 1024,
+        retention_days=14,
+    )
+    cloud_key = read_ingest_key(args.ingest_key_file) if args.cloud_endpoint else None
+    cloud_host_id = default_cloud_host_id(args.identity_salt) if args.cloud_endpoint else None
+    monitor = ShadowMonitor(
+        model=model,
+        model_path=args.model,
+        rule_thresholds=rules,
+        telemetry=TelemetryCollector(),
+        agent=agent,
+        metrics_output=args.metrics_output,
+        scores_output=args.scores_output,
+        alerts_output=args.alerts_output,
+        cloud_endpoint=args.cloud_endpoint,
+        ingest_key=cloud_key,
+        cloud_host_id=cloud_host_id,
+        upload_interval=args.upload_interval,
+    )
+    monitor.run(
+        event_interval=args.interval,
+        metric_interval=args.metric_interval,
+        duration=parse_duration(args.duration),
+    )
 
 
 def cmd_build_combined(args: argparse.Namespace) -> None:
@@ -802,6 +838,24 @@ def cmd_summarize(args: argparse.Namespace) -> None:
     print(f"summary saved to {args.output}")
 
 
+def cmd_review_alerts(args: argparse.Namespace) -> None:
+    rows = build_review_rows(read_jsonl(args.input))
+    write_review_csv(args.csv, rows)
+    write_review_html(args.html, rows)
+    print(f"review queue: {len(rows)} alert(s)")
+    print(f"editable labels: {args.csv}")
+    print(f"read-only view: {args.html}")
+
+
+def cmd_review_summary(args: argparse.Namespace) -> None:
+    report = summarize_review_csv(args.input)
+    _write_json(args.output, report)
+    print(f"reviewed: {report['reviewed']}/{report['total']}")
+    for label, count in report["labels"].items():
+        print(f"{label}: {count}")
+    print(f"summary saved to {args.output}")
+
+
 def _add_storage_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--max-file-mb",
@@ -867,6 +921,37 @@ def build_parser() -> argparse.ArgumentParser:
     collect_all.add_argument("--no-packages", action="store_true")
     _add_storage_options(collect_all)
     collect_all.set_defaults(func=cmd_collect_all)
+
+    shadow = sub.add_parser(
+        "shadow-monitor",
+        help="score live metrics and security events while retaining raw evidence locally",
+    )
+    shadow.add_argument("--model", required=True)
+    shadow.add_argument("--rules", help="calibrated rule configuration JSON")
+    shadow.add_argument("--metrics-output", default="data/shadow_metrics.jsonl")
+    shadow.add_argument("--events-output", default="data/shadow_events.jsonl")
+    shadow.add_argument("--state", default="data/shadow_agent_state.json")
+    shadow.add_argument("--scores-output", default="reports/shadow_scores.jsonl")
+    shadow.add_argument("--alerts-output", default="reports/shadow_alerts.jsonl")
+    shadow.add_argument("--metric-interval", type=float, default=60.0)
+    shadow.add_argument("--event-interval", dest="interval", type=float, default=2.0)
+    shadow.add_argument("--package-interval", type=float, default=300.0)
+    shadow.add_argument("--heartbeat-interval", type=float, default=60.0)
+    shadow.add_argument("--duration", default="72h")
+    shadow.add_argument("--auth-log", action="append")
+    shadow.add_argument("--replay-auth-logs", action="store_true")
+    shadow.add_argument("--emit-existing-processes", action="store_true")
+    shadow.add_argument("--emit-existing-sessions", action="store_true")
+    shadow.add_argument("--no-package-inventory", action="store_true")
+    shadow.add_argument("--no-processes", action="store_true")
+    shadow.add_argument("--no-sessions", action="store_true")
+    shadow.add_argument("--no-auth-logs", action="store_true")
+    shadow.add_argument("--no-packages", action="store_true")
+    shadow.add_argument("--cloud-endpoint", help="HTTPS console base URL for aggregate snapshots")
+    shadow.add_argument("--ingest-key-file", help="mode-600 file containing the console ingest key")
+    shadow.add_argument("--identity-salt", default="data/shadow_identity_salt")
+    shadow.add_argument("--upload-interval", type=float, default=300.0)
+    shadow.set_defaults(func=cmd_shadow_monitor)
 
     audit = sub.add_parser(
         "audit-data",
@@ -1114,6 +1199,17 @@ def build_parser() -> argparse.ArgumentParser:
     summarize.add_argument("--input", required=True)
     summarize.add_argument("--output", default="reports/summary.txt")
     summarize.set_defaults(func=cmd_summarize)
+
+    review = sub.add_parser("review-alerts", help="create an analyst labeling queue from anomaly JSONL")
+    review.add_argument("--input", required=True)
+    review.add_argument("--csv", default="reports/alert_review.csv")
+    review.add_argument("--html", default="reports/alert_review.html")
+    review.set_defaults(func=cmd_review_alerts)
+
+    review_summary = sub.add_parser("review-summary", help="validate and summarize analyst labels")
+    review_summary.add_argument("--input", default="reports/alert_review.csv")
+    review_summary.add_argument("--output", default="reports/review_summary.json")
+    review_summary.set_defaults(func=cmd_review_summary)
 
     return parser
 
