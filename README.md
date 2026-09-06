@@ -264,6 +264,16 @@ of overwriting the deployed artifact:
   --review reports/alert_review.csv
 ```
 
+The first private real-host review is now complete. All 75 alerts were checked
+against their surrounding event context: 70 were explained by normal system or
+development activity, five remote-access-related windows remained suspicious
+pending owner confirmation, and none was confirmed as an attack. A reviewed
+candidate removed 11 of those benign alerts without losing the five suspicious
+ones in the same recording, but it has not replaced the active model because
+that is not an independent evaluation. The sanitized findings and limitations
+are documented in [docs/human-review-findings.md](docs/human-review-findings.md).
+Raw events, timestamps, analyst notes, and host-specific models remain private.
+
 ## Running the trained detector in shadow mode
 
 Shadow mode collects and scores new one-minute windows without blocking
