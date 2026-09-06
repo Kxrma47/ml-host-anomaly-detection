@@ -228,18 +228,20 @@ Then calibrate the host-specific rules and score the windows:
 ```
 
 The resulting alerts should be reviewed before they are treated as attacks. The
-review command creates a stable ID for every alert and an editable CSV without
-copying the raw sample into the review file:
+review command creates a stable ID for every alert, an editable CSV, and a local
+interactive HTML reviewer without copying the raw sample into either file:
 
 ```bash
 .venv/bin/python -m ueba_detector review-alerts \
   --input reports/combined_anomalies.jsonl
 ```
 
-Set each CSV label to `benign`, `suspicious`, or `confirmed_attack`, add a short
-analyst note, and validate the work with `review-summary`. Those decisions are
-the missing ground truth needed to measure real precision and retrain on a
-cleaner baseline.
+Open `reports/alert_review.html`, set each label to `benign`, `suspicious`, or
+`confirmed_attack`, add a short analyst note, and use **Download CSV**. Replace
+`reports/alert_review.csv` with that exported file, then validate the work with
+`review-summary`. Regenerating the queue preserves labels already present in the
+CSV. Those decisions are the missing ground truth needed to measure real
+precision and retrain on a cleaner baseline.
 
 After labels are added, measure precision among reviewed alerts without making
 an unsupported recall claim:
@@ -303,6 +305,17 @@ Generate a privacy-safe operational report at any time:
 The report contains coverage, gaps, sensor errors, score percentiles, and alert
 counts. It intentionally omits hostnames, process details, users, addresses,
 commands, and raw events.
+
+Cloud ingestion uses a separate key for each pseudonymous host. Print the ID to
+enroll without revealing the hostname, then map that ID to its device key in the
+Cloudflare `AGENT_KEYS` secret:
+
+```bash
+.venv/bin/python -m ueba_detector cloud-identity \
+  --identity-salt "$HOME/Library/Application Support/HostWatch/data/shadow_identity_salt"
+```
+
+The owner read key is separate and is never accepted by the ingest endpoint.
 
 For a chronological train/validation/test evaluation directly from the raw
 files, use:
@@ -414,14 +427,14 @@ does not contain the website source or private host recordings.
 The core local workflow is implemented: collection, redaction, OCSF envelopes,
 feature building, model and rule scoring, chronological evaluation, replay,
 incident grouping, drift checks, provenance, stress testing, and automated
-release gates. The test suite currently contains 68 tests:
+release gates. The test suite currently contains 70 tests:
 
 ```bash
 python3 -m unittest discover -s tests -p 'test_*.py'
 ```
 
 ```text
-Ran 68 tests
+Ran 70 tests
 OK
 ```
 

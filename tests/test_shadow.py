@@ -25,11 +25,28 @@ class ShadowTests(unittest.TestCase):
         self.assertEqual(validate_cloud_endpoint("http://127.0.0.1:8788"), "http://127.0.0.1:8788")
 
     def test_request_signature_is_deterministic_and_body_bound(self):
-        first = signed_request_headers("k" * 32, b'{"a":1}', timestamp=10, nonce="abc")
-        second = signed_request_headers("k" * 32, b'{"a":2}', timestamp=10, nonce="abc")
+        first = signed_request_headers(
+            "k" * 32, b'{"a":1}', agent_id="host-0123456789abcdef",
+            timestamp=10, nonce="abc",
+        )
+        second = signed_request_headers(
+            "k" * 32, b'{"a":2}', agent_id="host-0123456789abcdef",
+            timestamp=10, nonce="abc",
+        )
         self.assertEqual(first["x-hostwatch-timestamp"], "10")
         self.assertEqual(first["x-hostwatch-nonce"], "abc")
+        self.assertEqual(first["x-hostwatch-agent"], "host-0123456789abcdef")
         self.assertNotEqual(first["x-hostwatch-signature"], second["x-hostwatch-signature"])
+
+    def test_request_signature_matches_cloudflare_golden_value(self):
+        headers = signed_request_headers(
+            "k" * 32, b'{"value":1}', agent_id="host-0123456789abcdef",
+            timestamp=1767225600, nonce="12345678-1234-1234-1234-123456789abc",
+        )
+        self.assertEqual(
+            headers["x-hostwatch-signature"],
+            "79500145f506060f8513483a3faeaad9bf10a0a2fba90c571aa6522a1ed388ce",
+        )
 
     def test_scores_and_persists_a_window(self):
         metrics = generate_normal_samples(count=20, seed=12)

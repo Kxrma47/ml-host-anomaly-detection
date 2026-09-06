@@ -41,6 +41,8 @@ from .review import (
     build_review_rows,
     evaluate_reviewed_alerts,
     load_review_labels,
+    merge_review_rows,
+    read_review_rows,
     select_reviewed_baseline,
     summarize_review_csv,
     write_review_csv,
@@ -849,12 +851,13 @@ def cmd_summarize(args: argparse.Namespace) -> None:
 
 
 def cmd_review_alerts(args: argparse.Namespace) -> None:
-    rows = build_review_rows(read_jsonl(args.input))
+    existing = read_review_rows(args.csv) if Path(args.csv).exists() else []
+    rows = merge_review_rows(read_jsonl(args.input), existing)
     write_review_csv(args.csv, rows)
     write_review_html(args.html, rows)
     print(f"review queue: {len(rows)} alert(s)")
     print(f"editable labels: {args.csv}")
-    print(f"read-only view: {args.html}")
+    print(f"interactive reviewer: {args.html}")
 
 
 def cmd_review_summary(args: argparse.Namespace) -> None:
@@ -942,6 +945,10 @@ def cmd_shadow_report(args: argparse.Namespace) -> None:
         f"collector errors: {report['events']['collector_errors']}"
     )
     print(f"report saved to {args.output}")
+
+
+def cmd_cloud_identity(args: argparse.Namespace) -> None:
+    print(default_cloud_host_id(args.identity_salt))
 
 
 def _add_storage_options(parser: argparse.ArgumentParser) -> None:
@@ -1036,7 +1043,7 @@ def build_parser() -> argparse.ArgumentParser:
     shadow.add_argument("--no-auth-logs", action="store_true")
     shadow.add_argument("--no-packages", action="store_true")
     shadow.add_argument("--cloud-endpoint", help="HTTPS console base URL for aggregate snapshots")
-    shadow.add_argument("--ingest-key-file", help="mode-600 file containing the console ingest key")
+    shadow.add_argument("--ingest-key-file", help="mode-600 file containing this host's device key")
     shadow.add_argument("--identity-salt", default="data/shadow_identity_salt")
     shadow.add_argument("--upload-interval", type=float, default=300.0)
     shadow.set_defaults(func=cmd_shadow_monitor)
@@ -1338,6 +1345,14 @@ def build_parser() -> argparse.ArgumentParser:
     shadow_report.add_argument("--stale-after", type=float, default=180.0)
     shadow_report.add_argument("--output", default="reports/shadow_health.json")
     shadow_report.set_defaults(func=cmd_shadow_report)
+
+    cloud_identity = sub.add_parser(
+        "cloud-identity", help="print the pseudonymous ID used to enroll this host"
+    )
+    cloud_identity.add_argument(
+        "--identity-salt", default="data/shadow_identity_salt"
+    )
+    cloud_identity.set_defaults(func=cmd_cloud_identity)
 
     return parser
 

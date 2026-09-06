@@ -8,9 +8,12 @@ from ueba_detector.review import (
     build_review_rows,
     evaluate_reviewed_alerts,
     load_review_labels,
+    merge_review_rows,
+    read_review_rows,
     select_reviewed_baseline,
     summarize_review_csv,
     write_review_csv,
+    write_review_html,
 )
 
 
@@ -52,6 +55,25 @@ class ReviewTests(unittest.TestCase):
         )
         self.assertEqual(selected, [samples[1]])
         self.assertEqual(report["excluded_reviewed_alert_windows"], 1)
+
+    def test_regeneration_preserves_decisions_and_writes_interactive_report(self):
+        alerts = [{"event_timestamp": "t1", "host": "h", "severity": "high"}]
+        existing = build_review_rows(alerts)
+        existing[0]["label"] = "suspicious"
+        existing[0]["analyst_note"] = "unexpected process burst"
+        merged = merge_review_rows(alerts, existing)
+        self.assertEqual(merged[0]["label"], "suspicious")
+        with tempfile.TemporaryDirectory() as tmp:
+            csv_path = Path(tmp) / "review.csv"
+            html_path = Path(tmp) / "review.html"
+            write_review_csv(csv_path, merged)
+            write_review_html(html_path, merged)
+            self.assertEqual(read_review_rows(csv_path), merged)
+            document = html_path.read_text(encoding="utf-8")
+            self.assertIn("Download CSV", document)
+            self.assertIn("hostwatch-review-v1", document)
+            self.assertIn('join("\\r\\n")', document)
+            self.assertNotIn("<td>unexpected process burst</td>", document)
 
 
 if __name__ == "__main__":

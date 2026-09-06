@@ -2,14 +2,18 @@ from __future__ import annotations
 
 import csv
 import hashlib
-import html
 import json
+import os
 from collections import Counter
 from pathlib import Path
 from typing import Any
 
 
 REVIEW_LABELS = {"unreviewed", "benign", "suspicious", "confirmed_attack"}
+REVIEW_FIELDS = [
+    "alert_id", "event_timestamp", "severity", "category", "ratio", "model_ratio",
+    "rules", "top_features", "label", "analyst_note",
+]
 
 
 def alert_id(alert: dict[str, Any]) -> str:
@@ -66,50 +70,90 @@ def build_review_rows(alerts: list[dict[str, Any]]) -> list[dict[str, str]]:
     return rows
 
 
+def read_review_rows(path: str | Path) -> list[dict[str, str]]:
+    with Path(path).open("r", encoding="utf-8", newline="") as stream:
+        rows = [{field: str(row.get(field) or "") for field in REVIEW_FIELDS}
+                for row in csv.DictReader(stream)]
+    seen: set[str] = set()
+    for row in rows:
+        identifier = row["alert_id"].strip()
+        if not identifier:
+            raise ValueError("Review row is missing alert_id")
+        if identifier in seen:
+            raise ValueError(f"Duplicate alert_id in review: {identifier}")
+        if row["label"] not in REVIEW_LABELS:
+            raise ValueError(f"Unsupported review label: {row['label']}")
+        seen.add(identifier)
+    return rows
+
+
+def merge_review_rows(
+    alerts: list[dict[str, Any]], existing_rows: list[dict[str, str]]
+) -> list[dict[str, str]]:
+    existing = {row["alert_id"]: row for row in existing_rows}
+    rows = build_review_rows(alerts)
+    for row in rows:
+        previous = existing.get(row["alert_id"])
+        if previous:
+            row["label"] = previous["label"]
+            row["analyst_note"] = previous["analyst_note"]
+    return rows
+
+
 def write_review_csv(path: str | Path, rows: list[dict[str, str]]) -> None:
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
-    fields = list(rows[0]) if rows else [
-        "alert_id", "event_timestamp", "severity", "category", "ratio", "model_ratio",
-        "rules", "top_features", "label", "analyst_note",
-    ]
     with target.open("w", encoding="utf-8", newline="") as stream:
-        writer = csv.DictWriter(stream, fieldnames=fields)
+        writer = csv.DictWriter(stream, fieldnames=REVIEW_FIELDS)
         writer.writeheader()
         writer.writerows(rows)
+    os.chmod(target, 0o600)
 
 
 def write_review_html(path: str | Path, rows: list[dict[str, str]]) -> None:
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
-    table_rows = "\n".join(
-        "<tr>" + "".join(f"<td>{html.escape(row[name])}</td>" for name in (
-            "alert_id", "event_timestamp", "severity", "category", "ratio", "rules",
-            "top_features", "label", "analyst_note",
-        )) + "</tr>"
-        for row in rows
-    )
-    document = f"""<!doctype html>
-<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width">
+    payload = json.dumps(rows, separators=(",", ":")).replace("<", "\\u003c")
+    document = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
 <title>HostWatch alert review</title>
 <style>
-body{{font:14px system-ui;margin:0;color:#17201d;background:#f5f7f6}}main{{padding:28px;max-width:1500px;margin:auto}}
-h1{{font-size:24px}}p{{color:#50605a}}.table{{overflow:auto;border:1px solid #d8dfdc;background:white}}
-table{{border-collapse:collapse;width:100%}}th,td{{padding:9px 11px;border-bottom:1px solid #e6ebe9;text-align:left;white-space:nowrap}}
-th{{position:sticky;top:0;background:#edf2f0}}td:nth-child(7),td:nth-child(9){{white-space:normal;min-width:240px}}
-</style><main><h1>HostWatch alert review</h1>
-<p>{len(rows)} alerts. Edit the CSV labels to benign, suspicious, or confirmed_attack; keep evidence in analyst_note.</p>
-<div class="table"><table><thead><tr><th>ID</th><th>Time</th><th>Severity</th><th>Category</th><th>Ratio</th><th>Rules</th><th>Top features</th><th>Label</th><th>Analyst note</th></tr></thead>
-<tbody>{table_rows}</tbody></table></div></main></html>"""
+*{box-sizing:border-box}body{font:14px system-ui;margin:0;color:#17201d;background:#f5f7f6}main{padding:24px;max-width:1600px;margin:auto}
+h1{font-size:24px;margin:0}p{color:#50605a}.top{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;margin-bottom:18px}.actions{display:flex;gap:8px;flex-wrap:wrap}
+button,input,select,textarea{font:inherit}button{border:1px solid #b9c6c1;background:#fff;padding:8px 11px;cursor:pointer}button.primary{background:#176b87;color:#fff;border-color:#176b87}
+.summary{display:grid;grid-template-columns:repeat(5,minmax(120px,1fr));border:1px solid #d8dfdc;background:#fff;margin-bottom:14px}.summary div{padding:12px;border-right:1px solid #e6ebe9}.summary div:last-child{border:0}.summary span{display:block;color:#60706a;font-size:12px}.summary strong{font-size:20px}
+.toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}.segments{display:flex}.segments button{margin-right:-1px}.segments button.active{background:#dce9e5;border-color:#6d9286}.search{min-width:260px;padding:8px 10px;border:1px solid #b9c6c1}
+.table{overflow:auto;max-height:calc(100vh - 250px);border:1px solid #d8dfdc;background:#fff}table{border-collapse:collapse;width:100%}th,td{padding:9px 10px;border-bottom:1px solid #e6ebe9;text-align:left;white-space:nowrap;vertical-align:top}
+th{position:sticky;top:0;background:#edf2f0;z-index:1}td.wrap{white-space:normal;min-width:190px;max-width:300px}select{padding:7px;border:1px solid #aebdb7;min-width:150px}textarea{padding:7px;border:1px solid #aebdb7;min-width:220px;min-height:54px;resize:vertical}.empty{padding:30px;text-align:center;color:#60706a}
+@media(max-width:800px){main{padding:14px}.top,.toolbar{align-items:stretch;flex-direction:column}.summary{grid-template-columns:repeat(2,1fr)}.summary div{border-bottom:1px solid #e6ebe9}.search{min-width:0;width:100%}.table{max-height:none}}
+</style></head><body><main>
+<div class="top"><div><h1>HostWatch alert review</h1><p>Local analyst decisions</p></div><div class="actions"><button id="reset">Reset local changes</button><button class="primary" id="download">Download CSV</button></div></div>
+<section class="summary" aria-label="Review summary"><div><span>Total</span><strong id="total">0</strong></div><div><span>Unreviewed</span><strong id="unreviewed">0</strong></div><div><span>Benign</span><strong id="benign">0</strong></div><div><span>Suspicious</span><strong id="suspicious">0</strong></div><div><span>Confirmed attack</span><strong id="confirmed_attack">0</strong></div></section>
+<div class="toolbar"><div class="segments" aria-label="Label filter"><button class="active" data-filter="all">All</button><button data-filter="unreviewed">Unreviewed</button><button data-filter="benign">Benign</button><button data-filter="suspicious">Suspicious</button><button data-filter="confirmed_attack">Confirmed</button></div><input class="search" id="search" type="search" placeholder="Search alert evidence" aria-label="Search alerts"></div>
+<div class="table"><table><thead><tr><th>ID</th><th>Time</th><th>Severity</th><th>Category</th><th>Ratio</th><th>Rules</th><th>Top features</th><th>Label</th><th>Analyst note</th></tr></thead><tbody id="rows"></tbody></table><div class="empty" id="empty" hidden>No alerts match this view.</div></div>
+<script type="application/json" id="review-data">__REVIEW_DATA__</script>
+<script>
+const fields=["alert_id","event_timestamp","severity","category","ratio","model_ratio","rules","top_features","label","analyst_note"];
+const labels=["unreviewed","benign","suspicious","confirmed_attack"];
+const rows=JSON.parse(document.getElementById("review-data").textContent);let filter="all";
+function saved(){try{return JSON.parse(localStorage.getItem("hostwatch-review-v1")||"{}")}catch{return {}}}
+const local=saved();for(const row of rows){if(local[row.alert_id]){row.label=local[row.alert_id].label;row.analyst_note=local[row.alert_id].analyst_note}}
+function persist(){const value={};for(const row of rows)value[row.alert_id]={label:row.label,analyst_note:row.analyst_note};try{localStorage.setItem("hostwatch-review-v1",JSON.stringify(value))}catch{}}
+function textCell(value,className=""){const cell=document.createElement("td");cell.textContent=value;cell.className=className;return cell}
+function summary(){const counts=Object.fromEntries(labels.map(label=>[label,0]));for(const row of rows)counts[row.label]+=1;document.getElementById("total").textContent=String(rows.length);for(const label of labels)document.getElementById(label).textContent=String(counts[label])}
+function render(){const query=document.getElementById("search").value.toLowerCase();const body=document.getElementById("rows");body.replaceChildren();const visible=rows.filter(row=>(filter==="all"||row.label===filter)&&(!query||Object.values(row).join(" ").toLowerCase().includes(query)));for(const row of visible){const tr=document.createElement("tr");tr.append(textCell(row.alert_id),textCell(row.event_timestamp),textCell(row.severity),textCell(row.category),textCell(row.ratio),textCell(row.rules,"wrap"),textCell(row.top_features,"wrap"));const labelCell=document.createElement("td");const select=document.createElement("select");select.setAttribute("aria-label",`Label ${row.alert_id}`);for(const label of labels){const option=document.createElement("option");option.value=label;option.textContent=label.replaceAll("_"," ");select.append(option)}select.value=row.label;select.addEventListener("change",()=>{row.label=select.value;persist();summary();render()});labelCell.append(select);tr.append(labelCell);const noteCell=document.createElement("td");const note=document.createElement("textarea");note.setAttribute("aria-label",`Note ${row.alert_id}`);note.value=row.analyst_note;note.addEventListener("input",()=>{row.analyst_note=note.value;persist()});noteCell.append(note);tr.append(noteCell);body.append(tr)}document.getElementById("empty").hidden=visible.length!==0;summary()}
+for(const button of document.querySelectorAll("[data-filter]"))button.addEventListener("click",()=>{filter=button.dataset.filter;for(const item of document.querySelectorAll("[data-filter]"))item.classList.toggle("active",item===button);render()});
+document.getElementById("search").addEventListener("input",render);
+document.getElementById("reset").addEventListener("click",()=>{try{localStorage.removeItem("hostwatch-review-v1")}catch{}location.reload()});
+document.getElementById("download").addEventListener("click",()=>{const quote=value=>`"${String(value).replaceAll('"','""')}"`;const csv=[fields.join(","),...rows.map(row=>fields.map(field=>quote(row[field])).join(","))].join("\\r\\n")+"\\r\\n";const link=document.createElement("a");link.href=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"}));link.download="alert_review.csv";link.click();setTimeout(()=>URL.revokeObjectURL(link.href),0)});
+render();
+</script></main></body></html>""".replace("__REVIEW_DATA__", payload)
     target.write_text(document, encoding="utf-8")
+    os.chmod(target, 0o600)
 
 
 def summarize_review_csv(path: str | Path) -> dict[str, Any]:
-    with Path(path).open("r", encoding="utf-8", newline="") as stream:
-        rows = list(csv.DictReader(stream))
-    invalid = sorted({row.get("label", "") for row in rows if row.get("label", "") not in REVIEW_LABELS})
-    if invalid:
-        raise ValueError(f"Unsupported review labels: {', '.join(invalid)}")
+    rows = read_review_rows(path)
     labels = Counter(row.get("label", "unreviewed") for row in rows)
     return {
         "total": len(rows),
@@ -119,8 +163,7 @@ def summarize_review_csv(path: str | Path) -> dict[str, Any]:
 
 
 def load_review_labels(path: str | Path) -> dict[str, str]:
-    with Path(path).open("r", encoding="utf-8", newline="") as stream:
-        rows = list(csv.DictReader(stream))
+    rows = read_review_rows(path)
     labels: dict[str, str] = {}
     for row in rows:
         identifier = str(row.get("alert_id") or "").strip()

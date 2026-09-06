@@ -2,7 +2,7 @@
 set -eu
 
 if [ "$#" -lt 2 ]; then
-  echo "usage: $0 MODEL RULES [CLOUD_ENDPOINT] [INGEST_KEY_FILE] [DURATION]" >&2
+  echo "usage: $0 MODEL RULES [CLOUD_ENDPOINT] [DEVICE_KEY_FILE] [DURATION]" >&2
   exit 2
 fi
 
@@ -27,7 +27,7 @@ if [ ! -f "$MODEL" ] || [ ! -f "$RULES" ]; then
   exit 1
 fi
 if [ -n "$ENDPOINT" ] && [ ! -f "$KEY_FILE" ]; then
-  echo "cloud reporting requires an ingest-key file" >&2
+  echo "cloud reporting requires a device-key file" >&2
   exit 1
 fi
 
@@ -47,6 +47,8 @@ rm -rf "$RUNTIME/app.previous"
 cp "$MODEL" "$RUNTIME/model.json"
 cp "$RULES" "$RUNTIME/rules.json"
 chmod 600 "$RUNTIME/model.json" "$RUNTIME/rules.json"
+HOST_ID=$(PYTHONPATH="$RUNTIME/app" "$BASE_PYTHON" -m ueba_detector cloud-identity \
+  --identity-salt "$RUNTIME/data/shadow_identity_salt")
 
 "$BASE_PYTHON" - "$PLIST" "$LABEL" "$RUNTIME" "$LOG_DIR" "$BASE_PYTHON" \
   "$DURATION" "$ENDPOINT" "$KEY_FILE" <<'PY'
@@ -93,5 +95,6 @@ if ! launchctl bootstrap "gui/$UID" "$PLIST"; then
 fi
 launchctl kickstart -k "gui/$UID/$LABEL"
 echo "HostWatch shadow monitor started"
+echo "cloud identity: $HOST_ID"
 echo "status: launchctl print gui/$UID/$LABEL"
 echo "logs: $LOG_DIR"
