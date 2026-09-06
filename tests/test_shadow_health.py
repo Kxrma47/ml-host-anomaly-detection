@@ -1,3 +1,4 @@
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -29,6 +30,7 @@ class ShadowHealthTests(unittest.TestCase):
             self.assertEqual(report["metrics"]["coverage_ratio"], 1.0)
             self.assertNotIn("private-host", str(report))
 
+    @unittest.skipIf(os.name == "nt", "POSIX permission bits are unavailable on Windows")
     def test_report_is_owner_only(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "health.json"
