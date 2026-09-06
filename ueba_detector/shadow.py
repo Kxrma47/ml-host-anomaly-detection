@@ -60,7 +60,12 @@ def upload_snapshot(endpoint: str, key: str, snapshot: dict[str, Any], *, timeou
     request = urllib.request.Request(
         f"{validate_cloud_endpoint(endpoint)}/api/ingest",
         data=json.dumps(snapshot, separators=(",", ":")).encode("utf-8"),
-        headers={"content-type": "application/json", "x-ingest-key": key},
+        headers={
+            "accept": "application/json",
+            "content-type": "application/json",
+            "user-agent": "HostWatch-Agent/0.6",
+            "x-ingest-key": key,
+        },
         method="POST",
     )
     try:
