@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 import time
 from collections import Counter
 from pathlib import Path
@@ -36,9 +37,18 @@ from .offline import (
 )
 from .provenance import build_provenance, sha256_file, verify_provenance, write_provenance
 from .reporting import build_anomaly_event, summarize_jsonl, write_text_summary
-from .review import build_review_rows, summarize_review_csv, write_review_csv, write_review_html
+from .review import (
+    build_review_rows,
+    evaluate_reviewed_alerts,
+    load_review_labels,
+    select_reviewed_baseline,
+    summarize_review_csv,
+    write_review_csv,
+    write_review_html,
+)
 from .readiness import audit_training_data, write_readiness_report
 from .shadow import ShadowMonitor, default_cloud_host_id, read_ingest_key
+from .shadow_health import build_shadow_health_report, write_shadow_health_report
 from .simulate import generate_normal_samples, generate_security_events, generate_test_samples
 from .storage import append_jsonl, RotatingJsonlWriter, read_jsonl, read_jsonl_dataset, write_jsonl
 from .standards import run_standards_audit, write_standards_reports
@@ -856,6 +866,84 @@ def cmd_review_summary(args: argparse.Namespace) -> None:
     print(f"summary saved to {args.output}")
 
 
+def cmd_review_evaluate(args: argparse.Namespace) -> None:
+    report = evaluate_reviewed_alerts(read_jsonl(args.alerts), load_review_labels(args.review))
+    _write_json(args.output, report)
+    print(f"reviewed alerts: {report['reviewed']}/{report['alerts']}")
+    if report["alert_precision"] is None:
+        print("alert precision: unavailable until at least one alert is reviewed")
+    else:
+        print(f"alert precision: {float(report['alert_precision']):.1%}")
+    print("recall: unavailable from alert review alone")
+    print(f"evaluation saved to {args.output}")
+
+
+def cmd_train_reviewed(args: argparse.Namespace) -> None:
+    samples = read_jsonl(args.input)
+    alerts = read_jsonl(args.alerts)
+    labels = load_review_labels(args.review)
+    try:
+        selected, selection = select_reviewed_baseline(
+            samples,
+            alerts,
+            labels,
+            maximum_unreviewed=args.maximum_unreviewed,
+        )
+    except ValueError as exc:
+        print(f"training blocked: {exc}", file=sys.stderr)
+        raise SystemExit(2) from None
+    model = NeuralAutoencoder.fit(
+        selected,
+        feature_names=COMBINED_FEATURE_NAMES,
+        hidden_dim=args.hidden_dim,
+        epochs=args.epochs,
+        learning_rate=args.learning_rate,
+        threshold_quantile=args.threshold_quantile,
+        seed=args.seed,
+    )
+    model.save(
+        args.model,
+        provenance=build_provenance(
+            dataset_paths=[args.input, args.alerts, args.review],
+            parameters={
+                "command": "train-reviewed",
+                "selection": selection,
+                "epochs": args.epochs,
+                "learning_rate": args.learning_rate,
+                "threshold_quantile": args.threshold_quantile,
+                "seed": args.seed,
+            },
+        ),
+    )
+    rules = calibrate_rule_thresholds(selected, quantile=args.rule_quantile)
+    save_rule_configuration(args.rules_output, rules)
+    _write_json(args.report, selection)
+    print(
+        f"trained reviewed model on {selection['selected_windows']}/"
+        f"{selection['input_windows']} windows"
+    )
+    print(f"model saved to {args.model}")
+    print(f"rules saved to {args.rules_output}")
+
+
+def cmd_shadow_report(args: argparse.Namespace) -> None:
+    report = build_shadow_health_report(
+        metrics_path=args.metrics,
+        events_path=args.events,
+        scores_path=args.scores,
+        alerts_path=args.alerts,
+        expected_interval=args.expected_interval,
+        stale_after=args.stale_after,
+    )
+    write_shadow_health_report(args.output, report)
+    print(f"shadow health: {str(report['state']).upper()}")
+    print(
+        f"windows: {report['scores']['windows']}; alerts: {report['alerts']['records']}; "
+        f"collector errors: {report['events']['collector_errors']}"
+    )
+    print(f"report saved to {args.output}")
+
+
 def _add_storage_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--max-file-mb",
@@ -1210,6 +1298,46 @@ def build_parser() -> argparse.ArgumentParser:
     review_summary.add_argument("--input", default="reports/alert_review.csv")
     review_summary.add_argument("--output", default="reports/review_summary.json")
     review_summary.set_defaults(func=cmd_review_summary)
+
+    review_evaluate = sub.add_parser(
+        "review-evaluate",
+        help="measure precision among reviewed alerts without inventing recall",
+    )
+    review_evaluate.add_argument("--alerts", required=True)
+    review_evaluate.add_argument("--review", default="reports/alert_review.csv")
+    review_evaluate.add_argument("--output", default="reports/review_evaluation.json")
+    review_evaluate.set_defaults(func=cmd_review_evaluate)
+
+    train_reviewed = sub.add_parser(
+        "train-reviewed",
+        help="train a baseline after excluding reviewed suspicious alert windows",
+    )
+    train_reviewed.add_argument("--input", required=True, help="combined feature JSONL")
+    train_reviewed.add_argument("--alerts", required=True, help="anomaly JSONL used for review")
+    train_reviewed.add_argument("--review", default="reports/alert_review.csv")
+    train_reviewed.add_argument("--model", default="models/reviewed_combined_model.json")
+    train_reviewed.add_argument("--rules-output", default="models/reviewed_rules.json")
+    train_reviewed.add_argument("--report", default="reports/reviewed_training.json")
+    train_reviewed.add_argument("--maximum-unreviewed", type=int, default=0)
+    train_reviewed.add_argument("--epochs", type=int, default=220)
+    train_reviewed.add_argument("--learning-rate", type=float, default=0.015)
+    train_reviewed.add_argument("--threshold-quantile", type=float, default=0.995)
+    train_reviewed.add_argument("--rule-quantile", type=float, default=0.995)
+    train_reviewed.add_argument("--hidden-dim", type=int)
+    train_reviewed.add_argument("--seed", type=int, default=42)
+    train_reviewed.set_defaults(func=cmd_train_reviewed)
+
+    shadow_report = sub.add_parser(
+        "shadow-report", help="summarize live monitor health without raw event details"
+    )
+    shadow_report.add_argument("--metrics", default="data/shadow_metrics.jsonl")
+    shadow_report.add_argument("--events", default="data/shadow_events.jsonl")
+    shadow_report.add_argument("--scores", default="reports/shadow_scores.jsonl")
+    shadow_report.add_argument("--alerts", default="reports/shadow_alerts.jsonl")
+    shadow_report.add_argument("--expected-interval", type=float, default=60.0)
+    shadow_report.add_argument("--stale-after", type=float, default=180.0)
+    shadow_report.add_argument("--output", default="reports/shadow_health.json")
+    shadow_report.set_defaults(func=cmd_shadow_report)
 
     return parser
 

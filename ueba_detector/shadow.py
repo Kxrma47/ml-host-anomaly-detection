@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import os
 import secrets
@@ -56,15 +57,34 @@ def validate_cloud_endpoint(endpoint: str) -> str:
     return value
 
 
+def signed_request_headers(
+    key: str,
+    body: bytes,
+    *,
+    timestamp: int | None = None,
+    nonce: str | None = None,
+) -> dict[str, str]:
+    request_timestamp = str(int(time.time()) if timestamp is None else timestamp)
+    request_nonce = nonce or secrets.token_hex(16)
+    message = request_timestamp.encode("ascii") + b"." + request_nonce.encode("ascii") + b"." + body
+    signature = hmac.new(key.encode("utf-8"), message, hashlib.sha256).hexdigest()
+    return {
+        "x-hostwatch-timestamp": request_timestamp,
+        "x-hostwatch-nonce": request_nonce,
+        "x-hostwatch-signature": signature,
+    }
+
+
 def upload_snapshot(endpoint: str, key: str, snapshot: dict[str, Any], *, timeout: float = 10.0) -> str:
+    body = json.dumps(snapshot, separators=(",", ":")).encode("utf-8")
     request = urllib.request.Request(
         f"{validate_cloud_endpoint(endpoint)}/api/ingest",
-        data=json.dumps(snapshot, separators=(",", ":")).encode("utf-8"),
+        data=body,
         headers={
             "accept": "application/json",
             "content-type": "application/json",
             "user-agent": "HostWatch-Agent/0.6",
-            "x-ingest-key": key,
+            **signed_request_headers(key, body),
         },
         method="POST",
     )

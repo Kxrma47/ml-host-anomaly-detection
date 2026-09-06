@@ -116,3 +116,77 @@ def summarize_review_csv(path: str | Path) -> dict[str, Any]:
         "labels": {label: labels.get(label, 0) for label in sorted(REVIEW_LABELS)},
         "reviewed": len(rows) - labels.get("unreviewed", 0),
     }
+
+
+def load_review_labels(path: str | Path) -> dict[str, str]:
+    with Path(path).open("r", encoding="utf-8", newline="") as stream:
+        rows = list(csv.DictReader(stream))
+    labels: dict[str, str] = {}
+    for row in rows:
+        identifier = str(row.get("alert_id") or "").strip()
+        label = str(row.get("label") or "").strip()
+        if not identifier:
+            raise ValueError("Review row is missing alert_id")
+        if identifier in labels:
+            raise ValueError(f"Duplicate alert_id in review: {identifier}")
+        if label not in REVIEW_LABELS:
+            raise ValueError(f"Unsupported review label: {label}")
+        labels[identifier] = label
+    return labels
+
+
+def evaluate_reviewed_alerts(alerts: list[dict[str, Any]], labels: dict[str, str]) -> dict[str, Any]:
+    known_ids = {alert_id(alert) for alert in alerts}
+    unknown_ids = sorted(set(labels) - known_ids)
+    if unknown_ids:
+        raise ValueError(f"Review contains {len(unknown_ids)} alert IDs not present in the anomaly file")
+    matched = [(alert, labels.get(alert_id(alert), "unreviewed")) for alert in alerts]
+    counts = Counter(label for _, label in matched)
+    reviewed = [(alert, label) for alert, label in matched if label != "unreviewed"]
+    positive = sum(label in {"suspicious", "confirmed_attack"} for _, label in reviewed)
+    benign = sum(label == "benign" for _, label in reviewed)
+    return {
+        "alerts": len(alerts),
+        "matched_reviews": sum(alert_id(alert) in labels for alert in alerts),
+        "reviewed": len(reviewed),
+        "unreviewed": len(alerts) - len(reviewed),
+        "labels": {label: counts.get(label, 0) for label in sorted(REVIEW_LABELS)},
+        "alert_precision": positive / len(reviewed) if reviewed else None,
+        "reviewed_true_alerts": positive,
+        "reviewed_false_alerts": benign,
+        "recall": None,
+        "recall_note": "Alert review alone cannot reveal attacks the detector missed.",
+    }
+
+
+def select_reviewed_baseline(
+    samples: list[dict[str, Any]],
+    alerts: list[dict[str, Any]],
+    labels: dict[str, str],
+    *,
+    maximum_unreviewed: int = 0,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    evaluation = evaluate_reviewed_alerts(alerts, labels)
+    if int(evaluation["unreviewed"]) > maximum_unreviewed:
+        raise ValueError(
+            f"Review gate failed: {evaluation['unreviewed']} alert(s) remain unreviewed; "
+            f"maximum allowed is {maximum_unreviewed}"
+        )
+    excluded_windows = {
+        (str(alert.get("host") or "unknown"), str(alert.get("event_timestamp") or ""))
+        for alert in alerts
+        if labels.get(alert_id(alert)) in {"suspicious", "confirmed_attack"}
+    }
+    selected = [
+        sample for sample in samples
+        if (str(sample.get("host") or "unknown"), str(sample.get("timestamp") or ""))
+        not in excluded_windows
+    ]
+    if not selected:
+        raise ValueError("No baseline windows remain after applying reviewed labels")
+    return selected, {
+        "input_windows": len(samples),
+        "selected_windows": len(selected),
+        "excluded_reviewed_alert_windows": len(samples) - len(selected),
+        "review": evaluation,
+    }

@@ -241,6 +241,27 @@ analyst note, and validate the work with `review-summary`. Those decisions are
 the missing ground truth needed to measure real precision and retrain on a
 cleaner baseline.
 
+After labels are added, measure precision among reviewed alerts without making
+an unsupported recall claim:
+
+```bash
+.venv/bin/python -m ueba_detector review-evaluate \
+  --alerts reports/combined_anomalies.jsonl \
+  --review reports/alert_review.csv
+```
+
+`train-reviewed` is deliberately fail-closed. By default, it refuses to train
+while even one alert remains unreviewed. Once the queue is complete, it excludes
+windows labeled suspicious or confirmed attack and writes a new model instead
+of overwriting the deployed artifact:
+
+```bash
+.venv/bin/python -m ueba_detector train-reviewed \
+  --input data/combined_train.jsonl \
+  --alerts reports/combined_anomalies.jsonl \
+  --review reports/alert_review.csv
+```
+
 ## Running the trained detector in shadow mode
 
 Shadow mode collects and scores new one-minute windows without blocking
@@ -255,8 +276,10 @@ pseudonymous host ID and aggregate counts; it cannot accept event details.
   --duration 72h
 ```
 
-On macOS, the installer runs the same command as a user LaunchAgent and wraps it
-with `caffeinate -im`, so idle system sleep does not stop the monitoring period:
+On macOS, the installer copies the agent and its runtime dependency into the
+private HostWatch application-support directory, runs it as a user LaunchAgent,
+and wraps it with `caffeinate -im`, so moving the source checkout or idle system
+sleep does not stop the monitoring period:
 
 ```bash
 ./scripts/install_macos_shadow_agent.sh \
@@ -266,6 +289,20 @@ with `caffeinate -im`, so idle system sleep does not stop the monitoring period:
 The lid must remain open. macOS does not permit `caffeinate` to defeat lid-close
 sleep. Remove the service with `./scripts/uninstall_macos_shadow_agent.sh`;
 recorded evidence is deliberately left in `~/Library/Application Support/HostWatch`.
+
+Generate a privacy-safe operational report at any time:
+
+```bash
+.venv/bin/python -m ueba_detector shadow-report \
+  --metrics "$HOME/Library/Application Support/HostWatch/data/shadow_metrics.jsonl" \
+  --events "$HOME/Library/Application Support/HostWatch/data/shadow_events.jsonl" \
+  --scores "$HOME/Library/Application Support/HostWatch/reports/shadow_scores.jsonl" \
+  --alerts "$HOME/Library/Application Support/HostWatch/reports/shadow_alerts.jsonl"
+```
+
+The report contains coverage, gaps, sensor errors, score percentiles, and alert
+counts. It intentionally omits hostnames, process details, users, addresses,
+commands, and raw events.
 
 For a chronological train/validation/test evaluation directly from the raw
 files, use:
@@ -377,14 +414,14 @@ does not contain the website source or private host recordings.
 The core local workflow is implemented: collection, redaction, OCSF envelopes,
 feature building, model and rule scoring, chronological evaluation, replay,
 incident grouping, drift checks, provenance, stress testing, and automated
-release gates. The test suite currently contains 59 tests:
+release gates. The test suite currently contains 68 tests:
 
 ```bash
 python3 -m unittest discover -s tests -p 'test_*.py'
 ```
 
 ```text
-Ran 59 tests
+Ran 68 tests
 OK
 ```
 

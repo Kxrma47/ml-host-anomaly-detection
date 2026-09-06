@@ -4,7 +4,12 @@ from pathlib import Path
 
 from ueba_detector.autoencoder import NeuralAutoencoder
 from ueba_detector.combined import COMBINED_FEATURE_NAMES, build_combined_samples
-from ueba_detector.shadow import pseudonymous_host_id, validate_cloud_endpoint, ShadowMonitor
+from ueba_detector.shadow import (
+    pseudonymous_host_id,
+    signed_request_headers,
+    validate_cloud_endpoint,
+    ShadowMonitor,
+)
 from ueba_detector.simulate import generate_normal_samples
 
 
@@ -18,6 +23,13 @@ class ShadowTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate_cloud_endpoint("http://example.com")
         self.assertEqual(validate_cloud_endpoint("http://127.0.0.1:8788"), "http://127.0.0.1:8788")
+
+    def test_request_signature_is_deterministic_and_body_bound(self):
+        first = signed_request_headers("k" * 32, b'{"a":1}', timestamp=10, nonce="abc")
+        second = signed_request_headers("k" * 32, b'{"a":2}', timestamp=10, nonce="abc")
+        self.assertEqual(first["x-hostwatch-timestamp"], "10")
+        self.assertEqual(first["x-hostwatch-nonce"], "abc")
+        self.assertNotEqual(first["x-hostwatch-signature"], second["x-hostwatch-signature"])
 
     def test_scores_and_persists_a_window(self):
         metrics = generate_normal_samples(count=20, seed=12)

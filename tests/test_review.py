@@ -3,7 +3,15 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from ueba_detector.review import alert_id, build_review_rows, summarize_review_csv, write_review_csv
+from ueba_detector.review import (
+    alert_id,
+    build_review_rows,
+    evaluate_reviewed_alerts,
+    load_review_labels,
+    select_reviewed_baseline,
+    summarize_review_csv,
+    write_review_csv,
+)
 
 
 class ReviewTests(unittest.TestCase):
@@ -28,6 +36,22 @@ class ReviewTests(unittest.TestCase):
             rows[0]["label"] = "benign"
             write_review_csv(path, rows)
             self.assertEqual(summarize_review_csv(path)["reviewed"], 1)
+            labels = load_review_labels(path)
+            report = evaluate_reviewed_alerts([{"event_timestamp": "x"}], labels)
+            self.assertEqual(report["reviewed_false_alerts"], 1)
+            self.assertIsNone(report["recall"])
+
+    def test_training_gate_blocks_unreviewed_and_excludes_positive_labels(self):
+        alert = {"event_timestamp": "t1", "host": "h"}
+        samples = [{"timestamp": "t1", "host": "h"}, {"timestamp": "t2", "host": "h"}]
+        identifier = alert_id(alert)
+        with self.assertRaisesRegex(ValueError, "remain unreviewed"):
+            select_reviewed_baseline(samples, [alert], {identifier: "unreviewed"})
+        selected, report = select_reviewed_baseline(
+            samples, [alert], {identifier: "confirmed_attack"}
+        )
+        self.assertEqual(selected, [samples[1]])
+        self.assertEqual(report["excluded_reviewed_alert_windows"], 1)
 
 
 if __name__ == "__main__":
