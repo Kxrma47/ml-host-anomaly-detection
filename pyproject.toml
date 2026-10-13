@@ -8,5 +8,8 @@ dependencies = ["psutil>=5.9"]
 [project.scripts]
 ueba-detector = "ueba_detector.cli:main"
 
+[tool.setuptools.packages.find]
+include = ["ueba_detector", "ueba_detector.*"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]

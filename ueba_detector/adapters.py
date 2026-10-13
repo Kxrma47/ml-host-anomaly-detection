@@ -12,6 +12,11 @@ from .redaction import redact_data
 
 
 DATASET_REGISTRY = {
+    "tc_cdm": {
+        "source": "https://github.com/darpa-i2o/Transparent-Computing",
+        "license": "public domain; released as-is by DARPA",
+        "track": "endpoint_provenance",
+    },
     "lanl": {
         "source": "https://csr.lanl.gov/data/2017/",
         "license": "LANL dataset terms; review before redistribution",
@@ -51,6 +56,111 @@ def _timestamp(value: Any, index: int) -> str:
 
 def _pseudonym(value: Any, salt: str) -> str:
     return hashlib.sha256(f"{salt}\x1f{value}".encode("utf-8")).hexdigest()[:16]
+
+
+def _union_value(value: Any) -> Any:
+    """Unwrap the single-key objects used by Avro's JSON union encoding."""
+    while isinstance(value, dict) and len(value) == 1:
+        value = next(iter(value.values()))
+    return value
+
+
+def _cdm_datum(row: dict[str, Any]) -> tuple[str, dict[str, Any]] | None:
+    datum = row.get("datum", row)
+    if not isinstance(datum, dict) or len(datum) != 1:
+        return None
+    qualified_name, payload = next(iter(datum.items()))
+    if not isinstance(payload, dict):
+        return None
+    return qualified_name.rsplit(".", 1)[-1], payload
+
+
+def _cdm_uuid(value: Any) -> str | None:
+    unwrapped = _union_value(value)
+    if unwrapped in (None, ""):
+        return None
+    return str(unwrapped)
+
+
+def _cdm_timestamp(value: Any, index: int) -> str:
+    try:
+        nanos = int(_union_value(value))
+        return _timestamp(nanos / 1_000_000_000, index)
+    except (TypeError, ValueError, OverflowError):
+        return _timestamp(None, index)
+
+
+def _cdm_event_semantics(native_type: str) -> tuple[str, str, str]:
+    action = native_type.upper().removeprefix("EVENT_")
+    if action in {"EXECUTE", "FORK", "CLONE", "CREATE_PROCESS"}:
+        return "process_started", "Process Activity", "Launch"
+    if action in {"EXIT", "TERMINATE", "END"}:
+        return "process_stopped", "Process Activity", "Terminate"
+    if action in {"CONNECT", "ACCEPT", "SENDMSG", "RECVMSG", "SENDTO", "RECVFROM"}:
+        return "network_activity", "Network Activity", action.title()
+    if action in {"OPEN", "CREATE_OBJECT", "READ", "WRITE", "RENAME", "UNLINK", "MODIFY_FILE_ATTRIBUTES"}:
+        return "file_activity", "File System Activity", action.title().replace("_", " ")
+    if "PRINCIPAL" in action or "LOGIN" in action:
+        return "authentication_activity", "Authentication", action.title().replace("_", " ")
+    return "endpoint_activity", "Application Log", action.title().replace("_", " ")
+
+
+def adapt_tc_cdm_rows(rows: Iterable[dict[str, Any]], *, salt: str) -> list[dict[str, Any]]:
+    """Normalize DARPA TC CDM18/CDM20 JSON envelopes without retaining raw identities."""
+    materialized = list(rows)
+    objects: dict[str, dict[str, Any]] = {}
+    for row in materialized:
+        datum = _cdm_datum(row)
+        if datum is None:
+            continue
+        kind, payload = datum
+        uuid = _cdm_uuid(payload.get("uuid"))
+        if not uuid or kind not in {"Subject", "FileObject", "NetFlowObject"}:
+            continue
+        metadata: dict[str, Any] = {"kind": kind}
+        host_id = _cdm_uuid(payload.get("hostId"))
+        if host_id:
+            metadata["host_id"] = host_id
+        objects[uuid] = metadata
+
+    normalized: list[dict[str, Any]] = []
+    for index, row in enumerate(materialized):
+        datum = _cdm_datum(row)
+        if datum is None or datum[0] != "Event":
+            continue
+        payload = datum[1]
+        native_type = str(_union_value(payload.get("type")) or "EVENT_UNKNOWN")
+        event_type, class_name, activity = _cdm_event_semantics(native_type)
+        subject_uuid = _cdm_uuid(payload.get("subject"))
+        object_uuid = _cdm_uuid(payload.get("predicateObject"))
+        subject = objects.get(subject_uuid or "", {"kind": "Subject"})
+        target = objects.get(object_uuid or "", {"kind": "Unknown"})
+        host_native = _cdm_uuid(payload.get("hostId")) or subject.get("host_id") or "dataset-host"
+        data: dict[str, Any] = {
+            "native_type": native_type,
+            "subject": {
+                "id": _pseudonym(subject_uuid or "unknown", salt),
+                "kind": subject.get("kind", "Subject"),
+            },
+            "object": {
+                "id": _pseudonym(object_uuid or "unknown", salt),
+                "kind": target.get("kind", "Unknown"),
+            },
+        }
+        normalized.append(
+            _event(
+                dataset="tc_cdm",
+                index=index,
+                timestamp=_cdm_timestamp(payload.get("timestampNanos"), index),
+                host=_pseudonym(host_native, salt),
+                event_type=event_type,
+                class_name=class_name,
+                activity=activity,
+                status="success",
+                data=data,
+            )
+        )
+    return normalized
 
 
 def _event(
@@ -120,17 +230,40 @@ def adapt_lanl(row: dict[str, Any], index: int, *, salt: str) -> dict[str, Any]:
 
 
 def adapt_optc(row: dict[str, Any], index: int, *, salt: str) -> dict[str, Any]:
-    action = str(row.get("action") or row.get("event_type") or row.get("type") or "observe").lower()
-    if "process" in action and any(word in action for word in ("start", "create", "open")):
+    native_object = str(row.get("object") or row.get("object_type") or "endpoint").upper()
+    native_action = str(row.get("action") or row.get("event_type") or row.get("type") or "observe").upper()
+    semantic_action = f"{native_object}_{native_action}".lower()
+    if native_object == "PROCESS" and native_action in {"CREATE", "START", "OPEN"}:
         event_type, class_name, activity = "process_started", "Process Activity", "Launch"
-    elif "flow" in action or "network" in action:
+    elif native_object == "PROCESS" and native_action in {"TERMINATE", "STOP", "EXIT"}:
+        event_type, class_name, activity = "process_stopped", "Process Activity", "Terminate"
+    elif native_object in {"FLOW", "NETWORK", "SOCKET"}:
         event_type, class_name, activity = "network_activity", "Network Activity", "Open"
-    elif "file" in action:
+    elif native_object == "FILE":
         event_type, class_name, activity = "file_activity", "File System Activity", "Observe"
     else:
         event_type, class_name, activity = "endpoint_activity", "Application Log", "Observe"
-    timestamp = _timestamp(row.get("timestamp") or row.get("time"), index)
-    host = _pseudonym(row.get("host") or row.get("hostname") or row.get("device") or "unknown", salt)
+
+    timestamp_value = row.get("timestamp_ms") or row.get("timestamp") or row.get("time")
+    try:
+        numeric_timestamp = float(timestamp_value)
+        if numeric_timestamp >= 100_000_000_000:
+            numeric_timestamp /= 1000.0
+        timestamp = _timestamp(numeric_timestamp, index)
+    except (TypeError, ValueError):
+        timestamp = _timestamp(timestamp_value, index)
+
+    host_native = row.get("host") or row.get("hostname") or row.get("device") or "unknown"
+    host = _pseudonym(host_native, salt)
+    properties = row.get("properties") if isinstance(row.get("properties"), dict) else {}
+    principal = row.get("principal") or properties.get("user")
+    actor_id = row.get("actorID") or row.get("actor_id")
+    object_id = row.get("objectID") or row.get("object_id") or row.get("id")
+    path_value = properties.get("file_path") or properties.get("image_path") or properties.get("path")
+    suffix = Path(str(path_value).replace("\\", "/")).suffix.lower() if path_value else ""
+    path_category = "executable" if suffix in {".exe", ".dll", ".com", ".bat", ".ps1"} else (
+        "document" if suffix in {".txt", ".doc", ".docx", ".pdf", ".csv"} else "other"
+    )
     return _event(
         dataset="optc",
         index=index,
@@ -140,9 +273,23 @@ def adapt_optc(row: dict[str, Any], index: int, *, salt: str) -> dict[str, Any]:
         class_name=class_name,
         activity=activity,
         data={
-            "native_action": action,
+            "native_object": native_object.lower(),
+            "native_action": native_action.lower(),
+            "semantic_action": semantic_action,
             "label": row.get("label") or row.get("scenario"),
-            "file": {"path": row.get("path") or row.get("file") or "unknown"},
+            "actor": {
+                "id": _pseudonym(actor_id, salt) if actor_id not in (None, "") else None,
+                "principal": _pseudonym(principal, salt) if principal not in (None, "") else None,
+            },
+            "object": {
+                "id": _pseudonym(object_id, salt) if object_id not in (None, "") else None,
+                "kind": native_object.title(),
+            },
+            "process": {
+                "pid_present": row.get("pid") not in (None, -1, "-1"),
+                "parent_pid_present": row.get("ppid") not in (None, -1, "-1"),
+            },
+            "path_category": path_category,
         },
     )
 
@@ -199,6 +346,8 @@ ADAPTERS = {"lanl": adapt_lanl, "optc": adapt_optc, "unsw": adapt_unsw, "loghub"
 
 
 def adapt_rows(dataset: str, rows: Iterable[dict[str, Any]], *, salt: str = "ueba-dataset") -> list[dict[str, Any]]:
+    if dataset == "tc_cdm":
+        return adapt_tc_cdm_rows(rows, salt=salt)
     if dataset not in ADAPTERS:
         raise ValueError(f"unsupported dataset: {dataset}")
     adapter = ADAPTERS[dataset]

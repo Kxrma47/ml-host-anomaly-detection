@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hostwatch.invalid/schemas/provenance-graph.schema.json",
+  "title": "HostWatch unified OCSF provenance graph",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "ocsf_version", "dataset_id", "nodes", "edges"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "ocsf_version": {"const": "1.8.0"},
+    "dataset_id": {"type": "string", "minLength": 1},
+    "nodes": {"type": "array", "items": {"$ref": "#/$defs/node"}},
+    "edges": {"type": "array", "items": {"$ref": "#/$defs/edge"}}
+  },
+  "$defs": {
+    "quality": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["missing_fields", "delayed", "reordered", "duplicate", "collector_degraded"],
+      "properties": {
+        "missing_fields": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+        "delayed": {"type": "boolean"},
+        "reordered": {"type": "boolean"},
+        "duplicate": {"type": "boolean"},
+        "collector_degraded": {"type": "boolean"}
+      }
+    },
+    "node": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "identity_scope", "first_seen", "last_seen", "attributes", "data_quality"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "type": {"enum": ["process", "executable", "file", "path_class", "user", "session", "package", "service", "socket_endpoint", "host"]},
+        "identity_scope": {"enum": ["dataset", "host", "session", "global"]},
+        "first_seen": {"type": "string", "format": "date-time"},
+        "last_seen": {"type": "string", "format": "date-time"},
+        "attributes": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name_token": {"type": "string"},
+            "role": {"type": "string"},
+            "path_category": {"type": "string"},
+            "package_category": {"type": "string"},
+            "port_class": {"type": "string"},
+            "ocsf_class_uid": {"type": "integer"}
+          }
+        },
+        "data_quality": {"$ref": "#/$defs/quality"}
+      }
+    },
+    "edge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "source_node", "target_node", "event_time", "ingest_time", "ordering_confidence", "source_collector", "source_event_id", "ocsf", "data_quality", "attributes"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "type": {"enum": ["spawned", "executed", "read", "wrote", "renamed", "connected", "accepted", "authenticated", "elevated", "installed", "started", "stopped"]},
+        "source_node": {"type": "string", "minLength": 1},
+        "target_node": {"type": "string", "minLength": 1},
+        "event_time": {"type": "string", "format": "date-time"},
+        "ingest_time": {"type": "string", "format": "date-time"},
+        "ordering_confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "source_collector": {"type": "string", "minLength": 1},
+        "source_event_id": {"type": "string", "minLength": 1},
+        "ocsf": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["class_uid", "activity_id", "type_uid"],
+          "properties": {
+            "class_uid": {"type": "integer", "minimum": 0},
+            "activity_id": {"type": "integer", "minimum": 0},
+            "type_uid": {"type": "integer", "minimum": 0}
+          }
+        },
+        "data_quality": {"$ref": "#/$defs/quality"},
+        "attributes": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "status": {"enum": ["unknown", "success", "failure"]},
+            "port_class": {"type": "string"},
+            "path_category": {"type": "string"}
+          }
+        }
+      }
+    }
+  }
+}

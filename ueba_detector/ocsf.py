@@ -108,6 +108,31 @@ def _class_attributes(
 ) -> dict[str, Any]:
     data = row.get("data") if isinstance(row.get("data"), dict) else {}
     host = str(row.get("host") or "unknown")
+    imported = str(row.get("source") or "") in {"dataset.tc_cdm", "dataset.optc"}
+    if imported and class_uid in {1001, 1007}:
+        subject = data.get("subject") if row["source"] == "dataset.tc_cdm" else data.get("actor")
+        subject = subject if isinstance(subject, dict) else {}
+        obj = data.get("object") if isinstance(data.get("object"), dict) else {}
+        event_uid = str(row.get("event_id") or "unknown")
+        actor_uid = str(subject.get("id") or event_uid)
+        device = {"hostname": host, "type_id": 0}
+        actor = {"process": {"uid": actor_uid}}
+        if class_uid == 1007:
+            kind = str(obj.get("kind") or "").lower()
+            target_id = obj.get("id") if kind in {"process", "subject"} or row["source"] == "dataset.optc" else None
+            target_uid = str(target_id or subject.get("id") or event_uid)
+            return {
+                "actor": actor,
+                "device": device,
+                "process": {"uid": target_uid, "name": "unknown"},
+            }
+        path_category = data.get("path_category")
+        file_type_id = 8 if path_category == "executable" else 1 if path_category == "document" else 0
+        return {
+            "actor": actor,
+            "device": device,
+            "file": {"name": "unknown", "type_id": file_type_id},
+        }
     if class_uid == 1007:
         attributes: dict[str, Any] = {"process": _process_object(data)}
         actor = data.get("actor")

@@ -382,11 +382,19 @@ python3 -m ueba_detector compare-models \
 python3 -m ueba_detector stress-test --windows 10000
 ```
 
-Adapters are included for LANL, OpTC, UNSW-NB15, and Loghub data. They
+Adapters are included for DARPA TC CDM, LANL, OpTC, UNSW-NB15, and Loghub data. They
 pseudonymize host, user, and endpoint identifiers and write a source/licensing
 manifest. Network and generic log datasets stay on separate model tracks because
 forcing unlike records into the 37-feature host model would make the experiment
 look simpler while making its results less trustworthy.
+
+The TC and OpTC adapters can also feed a small provenance graph pilot through
+`ueba_detector.research_graph_build.build_provenance_graph`. It links processes,
+files, network endpoints, and hosts with keyed pseudonymous IDs. Duplicate and
+out-of-order records are flagged; unsupported actions are counted rather than
+given an invented relationship. The pilot has a 10,000-event default limit. It
+has passed synthetic fixture and OCSF 1.8.0 checks, but no full public dataset
+has been processed or evaluated yet.
 
 ```bash
 python3 -m ueba_detector adapt-dataset \
@@ -437,15 +445,10 @@ does not contain the website source or private host recordings.
 The core local workflow is implemented: collection, redaction, OCSF envelopes,
 feature building, model and rule scoring, chronological evaluation, replay,
 incident grouping, drift checks, provenance, stress testing, and automated
-release gates. The test suite currently contains 70 tests:
+release gates. Run the local Python tests with:
 
 ```bash
 python3 -m unittest discover -s tests -p 'test_*.py'
-```
-
-```text
-Ran 70 tests
-OK
 ```
 
 There are still important production gaps. The agent does not use Windows Event
