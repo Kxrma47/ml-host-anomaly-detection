@@ -8,6 +8,7 @@ logs/
 # Host recordings and derived training windows stay local.
 data/*.jsonl
 data/*.jsonl.gz
+data/*.json.gz
 reports/live_anomalies.jsonl
 data/security_events.jsonl
 data/agent_state.json

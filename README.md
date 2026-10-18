@@ -393,8 +393,32 @@ The TC and OpTC adapters can also feed a small provenance graph pilot through
 files, network endpoints, and hosts with keyed pseudonymous IDs. Duplicate and
 out-of-order records are flagged; unsupported actions are counted rather than
 given an invented relationship. The pilot has a 10,000-event default limit. It
-has passed synthetic fixture and OCSF 1.8.0 checks, but no full public dataset
-has been processed or evaluated yet.
+has passed synthetic fixture and OCSF 1.8.0 checks. A separate bounded OpTC
+runner has also been exercised on real public records, but no full public
+dataset or ground truth has been processed or evaluated yet.
+
+For a local OpTC gzip file or byte-range prefix, compute the SHA-256 of those
+exact bytes and supply a private random salt. Keep both the raw file and salt
+outside Git. The command checks the hash before parsing, caps the compressed
+input at 16 MiB and the sample at 10,000 records, and prints aggregate counts
+only. It does not verify the complete upstream archive, labels, or detection
+accuracy.
+
+The recorded compatibility run used bytes `0-8388607` of public OpTC Drive
+file ID `1HQbZg4HoRxWbSt794YaDjaFRSQNJ3gMC` from the `optc_h051` mapping in
+[PIDSMaker's source map](https://github.com/ubc-provenance/PIDSMaker/blob/main/dataset_preprocessing/optc/google_drive_urls.py).
+Those 8,388,608 bytes hash to
+`728c4fb7ee8014363d3765e5c6da3c897c9cade563b1824bba588b65158d312b`.
+The [OpTC release](https://github.com/FiveDirections/OpTC-data) describes the
+public distribution and its as-is limitations. This prefix is not a substitute
+for hashing and evaluating the complete dataset.
+
+```bash
+export HOSTWATCH_PILOT_SALT="$(openssl rand -hex 32)"
+python3 -m ueba_detector.research_pilot \
+  --input /path/to/local-optc-prefix.json.gz \
+  --expected-sha256 YOUR_LOCAL_FILE_SHA256
+```
 
 ```bash
 python3 -m ueba_detector adapt-dataset \

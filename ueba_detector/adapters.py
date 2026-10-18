@@ -39,6 +39,22 @@ DATASET_REGISTRY = {
     },
 }
 
+_OPTC_OBJECTS = {
+    "FILE", "FLOW", "MODULE", "NETWORK", "PROCESS", "REGISTRY", "SERVICE",
+    "SHELL", "SOCKET", "TASK", "THREAD", "USER_SESSION",
+}
+_OPTC_ACTIONS = {
+    "ADD", "COMMAND", "CREATE", "DELETE", "EDIT", "EXIT", "GRANT",
+    "LOAD", "LOGOUT", "MESSAGE", "MODIFY", "OPEN", "READ", "REMOTE",
+    "REMOTE_CREATE", "REMOVE", "RENAME", "START", "STOP", "TERMINATE", "WRITE",
+}
+_OPTC_LABELS = {"attack", "benign", "malicious", "normal"}
+
+
+def _optc_category(value: Any, allowed: set[str]) -> str:
+    category = str(value or "").upper()
+    return category if category in allowed else "UNKNOWN"
+
 
 def _timestamp(value: Any, index: int) -> str:
     if value not in (None, ""):
@@ -230,8 +246,8 @@ def adapt_lanl(row: dict[str, Any], index: int, *, salt: str) -> dict[str, Any]:
 
 
 def adapt_optc(row: dict[str, Any], index: int, *, salt: str) -> dict[str, Any]:
-    native_object = str(row.get("object") or row.get("object_type") or "endpoint").upper()
-    native_action = str(row.get("action") or row.get("event_type") or row.get("type") or "observe").upper()
+    native_object = _optc_category(row.get("object") or row.get("object_type"), _OPTC_OBJECTS)
+    native_action = _optc_category(row.get("action") or row.get("event_type") or row.get("type"), _OPTC_ACTIONS)
     semantic_action = f"{native_object}_{native_action}".lower()
     if native_object == "PROCESS" and native_action in {"CREATE", "START", "OPEN"}:
         event_type, class_name, activity = "process_started", "Process Activity", "Launch"
@@ -264,6 +280,8 @@ def adapt_optc(row: dict[str, Any], index: int, *, salt: str) -> dict[str, Any]:
     path_category = "executable" if suffix in {".exe", ".dll", ".com", ".bat", ".ps1"} else (
         "document" if suffix in {".txt", ".doc", ".docx", ".pdf", ".csv"} else "other"
     )
+    raw_label = str(row.get("label") or "").lower()
+    label = raw_label if raw_label in _OPTC_LABELS else None
     return _event(
         dataset="optc",
         index=index,
@@ -276,7 +294,7 @@ def adapt_optc(row: dict[str, Any], index: int, *, salt: str) -> dict[str, Any]:
             "native_object": native_object.lower(),
             "native_action": native_action.lower(),
             "semantic_action": semantic_action,
-            "label": row.get("label") or row.get("scenario"),
+            "label": label,
             "actor": {
                 "id": _pseudonym(actor_id, salt) if actor_id not in (None, "") else None,
                 "principal": _pseudonym(principal, salt) if principal not in (None, "") else None,
