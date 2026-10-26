@@ -69,12 +69,18 @@ def _relation(event: dict[str, Any], event_id: str) -> tuple[str, str, str, str,
     action = str(data.get("native_type") or data.get("native_action") or "").upper()
     event_type = event["event_type"]
     missing: list[str] = []
+    if source == "dataset.tc_cdm" and subject.get("definition_present") is False:
+        return None
 
     if event_type == "process_started":
-        if source == "dataset.tc_cdm" and kind == "fileobject" and target:
-            if not actor:
-                missing.append("actor.id")
-            return "executed", "process", actor or event_id, "executable", target, missing
+        if source == "dataset.tc_cdm":
+            if action == "EVENT_EXECUTE" and kind == "fileobject" and target:
+                if not actor:
+                    missing.append("actor.id")
+                return "executed", "process", actor or event_id, "executable", target, missing
+            if action in {"EVENT_FORK", "EVENT_CLONE", "EVENT_CREATE_PROCESS"} and kind == "subject" and actor and target:
+                return "spawned", "process", actor, "process", target, missing
+            return None
         if actor and target and actor != target and kind in {"process", "subject"}:
             return "spawned", "process", actor, "process", target, missing
         if actor and target and actor == target:
@@ -94,6 +100,8 @@ def _relation(event: dict[str, Any], event_id: str) -> tuple[str, str, str, str,
         return "stopped", "process", process or event_id, "host", "host", missing
 
     if event_type == "file_activity":
+        if source == "dataset.tc_cdm" and kind != "fileobject":
+            return None
         operation = action.removeprefix("EVENT_")
         relation = {"READ": "read", "WRITE": "wrote", "RENAME": "renamed"}.get(operation)
         if relation is None:
@@ -105,6 +113,8 @@ def _relation(event: dict[str, Any], event_id: str) -> tuple[str, str, str, str,
         return relation, "process", actor or event_id, "file", target or event_id, missing
 
     if event_type == "network_activity":
+        if source == "dataset.tc_cdm" and kind != "netflowobject":
+            return None
         if not actor:
             missing.append("actor.id")
         if not target:
@@ -142,7 +152,7 @@ def build_provenance_graph(
     edge_by_event: dict[str, str] = {}
     seen: dict[str, str] = {}
     latest_by_host: dict[str, str] = {}
-    stats = {"input_events": 0, "accepted_events": 0, "unsupported_events": 0, "duplicate_events": 0, "reordered_events": 0, "missing_identity_events": 0}
+    stats = {"input_events": 0, "accepted_events": 0, "unsupported_events": 0, "duplicate_events": 0, "reordered_events": 0, "missing_identity_events": 0, "unresolved_reference_events": 0}
 
     def add_node(kind: str, host: str, identity: str, event_time: str) -> str:
         node_id = _id(salt, kind, dataset_id, host, identity)
@@ -204,6 +214,14 @@ def build_provenance_graph(
                 edges[edge_id]["data_quality"]["duplicate"] = True
             continue
         seen[event_id] = signature
+
+        if event["source"] == "dataset.tc_cdm":
+            subject = event["data"].get("subject")
+            target = event["data"].get("object")
+            if (isinstance(subject, dict) and subject.get("definition_present") is False) or (
+                isinstance(target, dict) and target.get("definition_present") is False
+            ):
+                stats["unresolved_reference_events"] += 1
 
         relation = _relation(event, event_id)
         if relation is None:

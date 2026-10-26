@@ -49,6 +49,14 @@ _OPTC_ACTIONS = {
     "REMOTE_CREATE", "REMOVE", "RENAME", "START", "STOP", "TERMINATE", "WRITE",
 }
 _OPTC_LABELS = {"attack", "benign", "malicious", "normal"}
+_CDM_EVENT_TYPES = {
+    "EVENT_ACCEPT", "EVENT_CLONE", "EVENT_CONNECT", "EVENT_CREATE_OBJECT",
+    "EVENT_CREATE_PROCESS", "EVENT_END", "EVENT_EXECUTE", "EVENT_EXIT",
+    "EVENT_FORK", "EVENT_LOGIN", "EVENT_MODIFY_FILE_ATTRIBUTES", "EVENT_OPEN",
+    "EVENT_READ", "EVENT_RECVFROM", "EVENT_RECVMSG", "EVENT_RENAME",
+    "EVENT_SENDMSG", "EVENT_SENDTO", "EVENT_TERMINATE", "EVENT_UNLINK",
+    "EVENT_WRITE",
+}
 
 
 def _optc_category(value: Any, allowed: set[str]) -> str:
@@ -131,7 +139,7 @@ def adapt_tc_cdm_rows(rows: Iterable[dict[str, Any]], *, salt: str) -> list[dict
             continue
         kind, payload = datum
         uuid = _cdm_uuid(payload.get("uuid"))
-        if not uuid or kind not in {"Subject", "FileObject", "NetFlowObject"}:
+        if not uuid or kind not in {"Subject", "FileObject", "NetFlowObject", "SrcSinkObject"}:
             continue
         metadata: dict[str, Any] = {"kind": kind}
         host_id = _cdm_uuid(payload.get("hostId"))
@@ -145,7 +153,8 @@ def adapt_tc_cdm_rows(rows: Iterable[dict[str, Any]], *, salt: str) -> list[dict
         if datum is None or datum[0] != "Event":
             continue
         payload = datum[1]
-        native_type = str(_union_value(payload.get("type")) or "EVENT_UNKNOWN")
+        raw_type = str(_union_value(payload.get("type")) or "").upper()
+        native_type = raw_type if raw_type in _CDM_EVENT_TYPES else "EVENT_UNKNOWN"
         event_type, class_name, activity = _cdm_event_semantics(native_type)
         subject_uuid = _cdm_uuid(payload.get("subject"))
         object_uuid = _cdm_uuid(payload.get("predicateObject"))
@@ -157,10 +166,12 @@ def adapt_tc_cdm_rows(rows: Iterable[dict[str, Any]], *, salt: str) -> list[dict
             "subject": {
                 "id": _pseudonym(subject_uuid or "unknown", salt),
                 "kind": subject.get("kind", "Subject"),
+                "definition_present": subject_uuid in objects,
             },
             "object": {
                 "id": _pseudonym(object_uuid or "unknown", salt),
                 "kind": target.get("kind", "Unknown"),
+                "definition_present": object_uuid in objects,
             },
         }
         normalized.append(

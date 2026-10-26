@@ -60,6 +60,36 @@ class ResearchGraphBuildTests(unittest.TestCase):
         node_types = {node["id"]: node["type"] for node in graph["nodes"]}
         self.assertEqual(node_types[graph["edges"][0]["target_node"]], "executable")
 
+    def test_tc_missing_or_non_file_definition_does_not_create_file_edge(self):
+        rows = tc_fixture()
+        graph, stats = self.build("tc_cdm", [rows[0], rows[2]])
+        self.assertEqual(stats["unresolved_reference_events"], 1)
+        self.assertEqual(stats["unsupported_events"], 1)
+        self.assertEqual(graph["edges"], [])
+
+        rows[1] = {"datum": {"com.bbn.tc.schema.avro.cdm18.SrcSinkObject": {
+            "uuid": "raw-file", "hostId": "raw-host"}}}
+        graph, stats = self.build("tc_cdm", rows)
+        self.assertEqual(stats["unresolved_reference_events"], 0)
+        self.assertEqual(stats["unsupported_events"], 1)
+        self.assertEqual(graph["edges"], [])
+
+    def test_tc_execute_without_file_definition_does_not_become_start(self):
+        rows = tc_fixture()
+        rows[2]["datum"]["com.bbn.tc.schema.avro.cdm18.Event"]["type"] = "EVENT_EXECUTE"
+        graph, stats = self.build("tc_cdm", [rows[0], rows[2]])
+        self.assertEqual(stats["unresolved_reference_events"], 1)
+        self.assertEqual(graph["edges"], [])
+
+    def test_tc_fork_links_two_defined_subjects(self):
+        rows = tc_fixture()
+        rows[1] = {"datum": {"com.bbn.tc.schema.avro.cdm18.Subject": {
+            "uuid": "raw-file", "hostId": "raw-host"}}}
+        rows[2]["datum"]["com.bbn.tc.schema.avro.cdm18.Event"]["type"] = "EVENT_FORK"
+        graph, stats = self.build("tc_cdm", rows)
+        self.assertEqual(stats["accepted_events"], 1)
+        self.assertEqual(graph["edges"][0]["type"], "spawned")
+
     def test_optc_fixture_creates_process_file_and_flow_edges(self):
         graph, stats = self.build("optc", optc_fixture())
         self.assertEqual(stats["accepted_events"], 3)

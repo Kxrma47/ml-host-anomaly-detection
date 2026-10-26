@@ -420,6 +420,27 @@ python3 -m ueba_detector.research_pilot \
   --expected-sha256 YOUR_LOCAL_FILE_SHA256
 ```
 
+A TC archive pilot checks a complete compressed file and its gzip trailer,
+rejects unsafe tar members without extracting them, then builds a graph from
+at most the first 10,000 JSON records. It requires a private salt and reports
+only aggregate counts. The recorded run used the 423,640,477-byte Clearscope
+E3 JSON archive identified as `1z1KtBvS-XBwCt3DlkI6yS1UO7_1sVvB6` in
+[PIDSMaker's download script](https://github.com/ubc-provenance/PIDSMaker/blob/main/dataset_preprocessing/darpa_tc/scripts/download_clearscope_e3.sh).
+Its complete-file SHA-256 is
+`66cf9ea4ac3efcfdbb4cb4b13633b36b67b2d2bde815c2c6125c3a5de7dc6492`.
+The archive declares 11.2 GB uncompressed, so it was streamed, not extracted.
+The first 10,000 records yielded 7,599 events and 1,227 supported graph edges.
+Earlier pilot logic had mislabeled reads of `SrcSinkObject` as file reads; the
+stricter builder leaves those events unlinked. This verifies one archive and
+bounded ingestion, not the whole E3 dataset, its labels, or model accuracy.
+
+```bash
+export HOSTWATCH_PILOT_SALT="$(openssl rand -hex 32)"
+python3 -m ueba_detector.research_tc_archive \
+  --input /path/to/ta1-clearscope-e3-official.json.tar.gz \
+  --expected-sha256 66cf9ea4ac3efcfdbb4cb4b13633b36b67b2d2bde815c2c6125c3a5de7dc6492
+```
+
 ```bash
 python3 -m ueba_detector adapt-dataset \
   --dataset lanl \

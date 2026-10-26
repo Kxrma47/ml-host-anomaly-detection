@@ -75,6 +75,15 @@ class AdapterTests(unittest.TestCase):
         self.assertEqual(first[0]["event_type"], "network_activity")
         self.assertEqual(first[0]["timestamp"], "2023-11-14T22:13:20Z")
 
+    def test_tc_unknown_native_type_cannot_carry_free_text(self):
+        row = {"datum": {"com.bbn.tc.schema.avro.cdm18.Event": {
+            "type": "EVENT_PASSWORD=private-canary", "hostId": "raw-host",
+            "subject": "raw-subject", "predicateObject": "raw-object"}}}
+        event = adapt_rows("tc_cdm", [row], salt="test")[0]
+        self.assertEqual(event["data"]["native_type"], "EVENT_UNKNOWN")
+        self.assertEqual(event["event_type"], "endpoint_activity")
+        self.assertNotIn("private-canary", json.dumps(event))
+
     def test_lanl_maps_process_and_pseudonymizes_identity(self):
         rows = adapt_rows(
             "lanl",

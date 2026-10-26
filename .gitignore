@@ -9,6 +9,9 @@ logs/
 data/*.jsonl
 data/*.jsonl.gz
 data/*.json.gz
+data/public_datasets/
+docs/research/
+reports/research/
 reports/live_anomalies.jsonl
 data/security_events.jsonl
 data/agent_state.json
